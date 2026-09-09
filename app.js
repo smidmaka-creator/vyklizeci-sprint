@@ -843,5 +843,11 @@
   }
   // označit, že lokální data už někdo měnil (aby se ukázky nevracely po smazání)
   const origWipe = DB.wipeAll.bind(DB); DB.wipeAll = async () => { localStorage.setItem("vs.local.touched", "1"); return origWipe(); };
+
+  // PWA: service worker jen na https (ne při lokálním vývoji), zákaz pinch-zoomu na iOS
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
+  document.addEventListener("gesturestart", e => e.preventDefault());
+  document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
   boot();
 })();
