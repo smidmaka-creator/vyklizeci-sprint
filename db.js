@@ -88,8 +88,11 @@
     async touchStreak(id){ const p = this.s.players.find(x => x.id === id); if (!p) return; const n = nextStreak(p); if (n){ Object.assign(p, n); this._save(); this._emit(); } }
 
     // --- věci ---
-    async addItem({ name, cat, cond, photoBlob, photoDataUrl, createdBy }){
+    aiAvailable(){ return false; }
+    async analyzePhoto(){ return null; }
+    async addItem({ name, cat, cond, photoBlob, photoDataUrl, createdBy, ai }){
       const it = { id: uid(), name, cat, cond, photo_path: photoDataUrl || null, decision: null, review_at: null,
+        price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null,
         created_by: createdBy || null, decided_by: null, created_at: new Date().toISOString(), decided_at: null, position: Date.now() };
       this.s.items.unshift(it); this._save(); this._emit();
       if (this._quota){ this._quota = false; throw new Error("quota"); }
@@ -235,8 +238,27 @@
       await this._after("players");
     }
 
+    // --- AI odhad z fotky (Edge Function analyze-item) ---
+    aiAvailable(){ return true; }
+    async analyzePhoto(blob){
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result).split(",")[1]);
+        r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+      const { data, error } = await this.sb.functions.invoke("analyze-item", { body: { image: b64, media_type: blob.type || "image/jpeg" } });
+      if (error){
+        let msg = error.message || "AI se neozvala";
+        try { const j = await error.context.json(); if (j && j.error) msg = j.error; } catch(e){}
+        throw new Error(msg);
+      }
+      if (!data || data.error) throw new Error((data && data.error) || "Prázdná odpověď AI");
+      return data;
+    }
+
     // --- věci ---
-    async addItem({ name, cat, cond, photoBlob, createdBy }){
+    async addItem({ name, cat, cond, photoBlob, createdBy, ai }){
       let photo_path = null;
       if (photoBlob){
         photo_path = this.household.id + "/" + uid() + ".jpg";
@@ -245,6 +267,7 @@
       }
       const { data, error } = await this.sb.from("items").insert({
         household_id: this.household.id, name, cat, cond, photo_path, created_by: createdBy || null, position: Date.now(),
+        price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null,
       }).select().single();
       if (error) throw new Error(error.message);
       await this._after("items"); return data;

@@ -43,6 +43,10 @@ create table if not exists items (
   photo_path    text,                        -- cesta ve Storage bucketu "photos"
   decision      text check (decision in ('keep','sell','donate','trash','maybe')),
   review_at     timestamptz,                 -- pro "krabici na rok"
+  price_lo      int,                         -- odhad z fotky (AI); null = heuristika v appce
+  price_hi      int,
+  advice        text,
+  channel       text check (channel in ('sell','donate','trash')),
   created_by    uuid references players(id) on delete set null,
   decided_by    uuid references players(id) on delete set null,
   created_at    timestamptz not null default now(),

@@ -40,8 +40,29 @@ Pak na prvním telefonu **založ domácnost** (dostaneš 6místný kód), na ost
 
 Anon klíč je určený pro klienty a smí být v kódu. Data chrání Row Level Security: každý řádek patří domácnosti a vidí ho jen zařízení, která jsou jejími členy (tabulka `household_members`, funkce `is_member`). Připojit se jde jen přes RPC `join_household(kód)`.
 
+## AI rozpoznání z fotky (volitelné)
+
+Vyfotíš věc → Claude navrhne název, kategorii, stav, cenu na Vinted/Bazoši a doporučení. Klíč k Anthropic API
+je jen v Edge Function na Supabase (`supabase/functions/analyze-item/index.ts`), do prohlížeče se nedostane.
+
+1. **Sloupce v DB** — pokud máš DB z dřívějška, spusť v SQL Editoru `supabase/migrations/002_ai_fields.sql`
+   (čerstvý `schema.sql` je už obsahuje).
+2. **Klíč k Anthropic API** — na [console.anthropic.com](https://console.anthropic.com) → *API keys* → vytvoř klíč.
+   Nastav si tam i limit útraty (*Limits*), ať máš strop.
+3. **Secret ve funkci** — Supabase → *Edge Functions → Secrets* → `ANTHROPIC_API_KEY` = tvůj klíč.
+4. **Nasazení funkce** — buď v Supabase → *Edge Functions → Deploy a new function → Via editor*, název `analyze-item`,
+   vložit obsah `index.ts`; nebo přes CLI:
+
+   ```bash
+   npx supabase login
+   npx supabase functions deploy analyze-item --project-ref <project-ref>
+   ```
+
+Appka funkci pozná sama: v rodinném režimu se po vyfocení objeví „Rozpoznávám…" a formulář se předvyplní.
+Cena: model `claude-opus-5`, jedna fotka ≈ 1–2 Kč. V `index.ts` jde přepnout na levnější `claude-haiku-4-5`
+(cca 5× levnější, o něco méně přesné odhady).
+
 ## Co (zatím) není
 
-- rozpoznání věci z fotky (AI) a automatický odhad ceny podle reálných inzerátů
 - instalace jako PWA (ikona na ploše, offline)
 - napojení na Vinted / Bazoš
