@@ -41,7 +41,7 @@ create table if not exists items (
   cat           text not null,
   cond          text not null,
   photo_path    text,                        -- cesta ve Storage bucketu "photos"
-  decision      text check (decision in ('keep','sell','donate','trash','maybe')),
+  decision      text check (decision in ('keep','out','sell','donate','trash','maybe')),  -- out = zbavit se (čeká na 2. kolo)
   review_at     timestamptz,                 -- pro "krabici na rok"
   price_lo      int,                         -- odhad z fotky (AI); null = heuristika v appce
   price_hi      int,
@@ -51,7 +51,9 @@ create table if not exists items (
   created_by    uuid references players(id) on delete set null,
   decided_by    uuid references players(id) on delete set null,
   created_at    timestamptz not null default now(),
-  decided_at    timestamptz,
+  decided_at    timestamptz,                 -- 1. kolo (nechat / zbavit se)
+  sorted_at     timestamptz,                 -- 2. kolo (prodat / vyhodit)
+  sorted_by     uuid references players(id) on delete set null,
   position      bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
 create index if not exists items_stack_idx on items (household_id, decision, position desc);

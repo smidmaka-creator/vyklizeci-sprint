@@ -49,7 +49,7 @@
     async seedExample(){
       const p1 = uid(), p2 = uid(), p3 = uid();
       const mk = (name, cat, cond, decision, extra={}) => ({
-        id: uid(), name, cat, cond, photo_path: null, decision: decision || null, review_at: null, owner_id: null,
+        id: uid(), name, cat, cond, photo_path: null, decision: decision || null, review_at: null, owner_id: null, sorted_at: null, sorted_by: null,
         created_by: p1, decided_by: decision ? p1 : null, created_at: new Date().toISOString(),
         decided_at: decision ? new Date().toISOString() : null, position: Date.now() - Math.random()*1000, example: true, ...extra,
       });
@@ -63,10 +63,10 @@
         mk("Kávovar Krups Dolce Gusto", "elektronika", "dobre", null, { position: Date.now() + 2, owner_id: p1 }),
         mk("LEGO Technic 42100 (nekompletní)", "hracka", "opotrebene", null, { position: Date.now() + 1, owner_id: p3 }),
         mk("Deskovka Osadníci z Katanu", "hracka", "dobre", null, { position: Date.now() + 0 }),
-        mk("Dámské džíny Levi's 501, vel. 30", "obleceni-damske", "jako-nove", "sell"),
-        mk("Plyšový medvěd", "hracka", "dobre", "donate"),
-        mk("Sada 6 hrnků IKEA", "nadobi", "dobre", "donate"),
-        mk("Stolní ventilátor (nefunkční)", "elektronika", "opotrebene", "trash"),
+        mk("Dámské džíny Levi's 501, vel. 30", "obleceni-damske", "jako-nove", "sell", { sorted_at: new Date().toISOString(), sorted_by: p1 }),
+        mk("Plyšový medvěd", "hracka", "dobre", "out"),
+        mk("Sada 6 hrnků IKEA", "nadobi", "dobre", "out"),
+        mk("Stolní ventilátor (nefunkční)", "elektronika", "opotrebene", "trash", { sorted_at: new Date().toISOString(), sorted_by: p1 }),
         mk("Štos detektivek (8 ks)", "kniha", "dobre", "maybe", { review_at: new Date(Date.now() - 40*DAY).toISOString() }),
       ];
       this.s.sprints = [];
@@ -105,7 +105,9 @@
       if (decision === "maybe" && !it.review_at) it.review_at = new Date(Date.now() + 182*DAY).toISOString();
       this._save(); this._emit();
     }
-    async returnItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = null; it.decided_by = null; it.decided_at = null; it.position = Date.now(); this._save(); this._emit(); } }
+    async returnItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = null; it.decided_by = null; it.decided_at = null; it.sorted_at = null; it.sorted_by = null; it.position = Date.now(); this._save(); this._emit(); } }
+    async sortItem(id, decision, byPlayer){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = decision; it.sorted_by = byPlayer || null; it.sorted_at = new Date().toISOString(); this._save(); this._emit(); } }
+    async unsortItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = "out"; it.sorted_by = null; it.sorted_at = null; this._save(); this._emit(); } }
     async skipItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.position = Math.min(...this.s.items.filter(i => !i.decision).map(i => i.position)) - 1; this._save(); this._emit(); } }
     async updateItem(id, { name, cat, cond, ai, photoDataUrl, ownerId }){
       const it = this.s.items.find(x => x.id === id); if (!it) return;
@@ -287,7 +289,13 @@
       await this.sb.from("items").update(patch).eq("id", id);
       await this._after("items");
     }
-    async returnItem(id){ await this.sb.from("items").update({ decision: null, decided_by: null, decided_at: null, position: Date.now() }).eq("id", id); await this._after("items"); }
+    async returnItem(id){ await this.sb.from("items").update({ decision: null, decided_by: null, decided_at: null, sorted_at: null, sorted_by: null, position: Date.now() }).eq("id", id); await this._after("items"); }
+    async sortItem(id, decision, byPlayer){
+      const { error } = await this.sb.from("items").update({ decision, sorted_by: byPlayer || null, sorted_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw new Error(error.message);
+      await this._after("items");
+    }
+    async unsortItem(id){ await this.sb.from("items").update({ decision: "out", sorted_by: null, sorted_at: null }).eq("id", id); await this._after("items"); }
     async updateItem(id, { name, cat, cond, ai, photoBlob, ownerId }){
       const row = { name, cat, cond, owner_id: ownerId || null, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null };
       const old = this.cache.items.find(x => x.id === id);

@@ -6,7 +6,7 @@ Vanilla JS bez buildu; data buď jen v prohlížeči (lokální režim), nebo sd
 
 ## Co umí
 
-- **Karty jako Tinder** — u každé věci swipneš (nebo ťukneš) rozhodnutí: ← Vyhodit · → Prodat · ↑ Nechat · ↓ Darovat, navíc *Krabice na rok*
+- **Dvě kola rozhodování** — 1. kolo (Stack): u každé věci swipneš *← Zbavit se* / *Nechat →* (nebo *Ještě nevím → krabice na rok*); 2. kolo (Hromádky → Roztřídit): co jde pryč, roztřídíš na *← Vyhodit* / *Prodat →*, s hvězdičkou u doporučení podle ceny (migrace `supabase/migrations/004_two_rounds.sql` pro starší DB)
 - **Gamifikace** — XP, úrovně, série dní v řadě, konfety
 - **Rodina** — jedna domácnost, každý na svém mobilu, společný stack i hromádky, živý žebříček
 - **Čí to je** — u věci se určí majitel (nebo „společné"); každý vidí napřed svoji frontu, v žebříčku je vidět, kdo kolik má k vyřízení (`supabase/migrations/003_owner.sql` pro starší DB)

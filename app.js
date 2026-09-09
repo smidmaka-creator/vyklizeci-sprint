@@ -1,11 +1,12 @@
 /* ============================================================
-   app.js — UI a herní logika Vyklízecího sprintu
+   app.js — UI a herní logika Vyklízečky
    Data řeší db.js (LocalDB / RemoteDB), tady jen render + akce.
-   Tři záložky: Stack (karta) · Hromádky (rozhodnuto) · Rodina (žebříček).
+   Záložky: Stack (1. kolo: nechat / zbavit se) · Hromádky (2. kolo:
+   prodat / vyhodit + seznamy) · Rodina (žebříček).
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.6 · 9. 9. 2026";
+  const APP_VERSION = "0.9.0 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -31,6 +32,7 @@
     tag:'<path d="M4 4h7l9 9-7 7-9-9zM8 8h.01"/>',
     gift:'<path d="M4 9h16v11H4zM4 9l2-5c1.6-.6 3.4 0 4 1.6L12 9M20 9l-2-5c-1.6-.6-3.4 0-4 1.6L12 9M12 9v11"/>',
     bin:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+    out:'<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h9"/>',
     clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
     gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M4.5 4.5l1.4 1.4M18.1 18.1l1.4 1.4M3 12h2M19 12h2M4.5 19.5l1.4-1.4M18.1 5.9l1.4-1.4"/>',
@@ -49,6 +51,7 @@
     zoom:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
     layers:'<path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5"/>',
     arrows:'<path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
+    back:'<path d="M15 5l-7 7 7 7"/>',
   };
   const ic = (n, cls="") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||""}</svg>`;
 
@@ -73,12 +76,14 @@
     {id:"opotrebene", label:"Opotřebené", mult:0.5},
   ];
   const COND = Object.fromEntries(CONDS.map(c => [c.id, c]));
+  // stavy věci: 1. kolo keep/out/maybe, 2. kolo out → sell/trash (donate = starší data, jen se zobrazí)
   const DEC = {
-    keep:   {label:"Nechat",  verb:"Zůstává doma",       icon:"home",  cvar:"--keep"},
-    sell:   {label:"Prodat",  verb:"Jde na prodej",       icon:"tag",   cvar:"--sell"},
-    donate: {label:"Darovat", verb:"Jde darovat",         icon:"gift",  cvar:"--donate"},
-    trash:  {label:"Vyhodit", verb:"Jde vyhodit",         icon:"bin",   cvar:"--trash"},
-    maybe:  {label:"Krabice na rok", verb:"V krabici na rok", icon:"clock", cvar:"--maybe"},
+    keep:   {label:"Nechat",     verb:"Zůstává doma",                    icon:"home", cvar:"--keep",   dark:"--keep-dark"},
+    out:    {label:"Zbavit se",  verb:"Jde pryč · roztřídíš v Hromádkách", icon:"out",  cvar:"--donate", dark:"--donate-dark"},
+    sell:   {label:"Prodat",     verb:"Jde na prodej",                   icon:"tag",  cvar:"--sell",   dark:"--sell-dark"},
+    trash:  {label:"Vyhodit",    verb:"Jde vyhodit",                     icon:"bin",  cvar:"--trash",  dark:"--trash-dark"},
+    donate: {label:"Darovat",    verb:"Jde darovat",                     icon:"gift", cvar:"--donate", dark:"--donate-dark"},
+    maybe:  {label:"Krabice na rok", verb:"V krabici na rok",            icon:"clock", cvar:"--maybe", dark:"--maybe-dark"},
   };
   const LEVELS = [
     {min:0,name:"Nováček"},{min:150,name:"Vyklízeč"},{min:400,name:"Uklizeno"},
@@ -126,33 +131,46 @@
   let animating = false;
   let curPileKey = null;
   let tab = localStorage.getItem("vs.tab") || "stack";
+  let sorting = false;                                 // v Hromádkách otevřený deck 2. kola
   const seenHint = () => localStorage.getItem("vs.seenHint") === "1";
   const playerKey = () => "vs.player." + (DB.household ? DB.household.id : "local");
 
   const players = () => DB.players();
   const items = () => DB.items();
-  // fronta: "mine" = jen moje věci, "all" = všechny (moje napřed, pak společné, pak cizí)
-  // při startu vždy Moje, pokud tam něco je; přepnutí platí do dalšího spuštění
-  let queueMode = "mine";
+  let queueMode = "mine";                              // 1. kolo: Moje / Všechny; při startu Moje, pokud tam něco je
   let pinId = null;                                    // věc vrácená z krabice na rok → dočasně nahoře
+  let skipped = [];                                    // přeskočené věci jdou na konec fronty (v pořadí přeskočení)
   const optimistic = new Set();                        // právě rozhodnuté věci, které ještě neuložila DB (skryté hned)
-  let lastTopId = null;                                // pro animaci nástupu nové karty
-  let skipped = [];                                    // přeskočené věci jdou na úplný konec fronty (v pořadí přeskočení)
+  const lastTop = { stack: null, sort: null };         // pro animaci nástupu nové karty
   const rank = i => i.id === pinId ? -1
     : skipped.includes(i.id) ? 10 + skipped.indexOf(i.id)
     : (i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1));
   const pendingAll = () => items().filter(i => !i.decision && !optimistic.has(i.id)).sort((a, b) => rank(a) - rank(b));
   const myPending = () => items().filter(i => !i.decision && !optimistic.has(i.id) && i.owner_id === meId);
-  const pending = () => queueMode === "mine" ? myPending().sort((a, b) => rank(a) - rank(b)) : pendingAll();
+  const pending = () => queueMode === "mine" ? myPending() : pendingAll();
+  // 2. kolo: co je "zbavit se" a čeká na prodat/vyhodit — nejstarší napřed, přeskočené na konec
+  const skipRank = i => skipped.includes(i.id) ? 10 + skipped.indexOf(i.id) : 0;
+  const outItems = () => items().filter(i => i.decision === "out" && !optimistic.has(i.id))
+    .sort((a, b) => skipRank(a) - skipRank(b) || (new Date(a.decided_at || 0) - new Date(b.decided_at || 0)));
   const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
   const decidedTodayByMe = () => items().filter(i => i.decided_by === meId && i.decided_at && new Date(i.decided_at).getTime() >= startOfToday()).length;
   function setQueue(mode){ queueMode = mode; pinId = null; }
   const defaultQueue = () => { queueMode = myPending().length ? "mine" : "all"; };
-  function setTab(t){ tab = t; localStorage.setItem("vs.tab", t); }
+  function setTab(t){ tab = t; sorting = false; localStorage.setItem("vs.tab", t); }
   const countBy = d => items().filter(i => i.decision === d).length;
   const me = () => players().find(p => p.id === meId) || null;
   const initials = n => (String(n).trim()[0] || "?").toUpperCase();
   const avColor = p => AV_COLORS[(p.color ?? Math.max(0, players().indexOf(p))) % AV_COLORS.length];
+
+  /* ---------- decky ----------
+     left/right = co znamená tah doleva / doprava (a dvě tlačítka dole na kartě) */
+  const DECKS = {
+    stack: { name: "stack", items: () => pending(), left: "out",   right: "keep", xp: 10, star: false,
+             hint: "Doprava = nechat · doleva = zbavit se · nebo ťukni na tlačítko" },
+    sort:  { name: "sort",  items: () => outItems(), left: "trash", right: "sell", xp: 5,  star: true,
+             hint: "Doprava = prodat · doleva = vyhodit · hvězdička = doporučení" },
+  };
+  const activeDeck = () => tab === "stack" ? DECKS.stack : (tab === "piles" && sorting) ? DECKS.sort : null;
 
   /* ---------- render ---------- */
   function render(){
@@ -187,51 +205,46 @@
   }
 
   function renderTabbar(){
-    const mine = myPending().length;
+    const mine = myPending().length, out = outItems().length;
     const t = (id, icon, label, badge) => `<button class="tab ${tab===id?"on":""}" data-tab="${id}">${ic(icon)}<span>${label}</span>${badge ? `<b class="badge">${badge}</b>` : ""}</button>`;
-    $("#tabbar").innerHTML = t("stack", "layers", "Stack", mine) + t("piles", "box", "Hromádky", "") + t("family", "users", "Rodina", "");
+    $("#tabbar").innerHTML = t("stack", "layers", "Stack", mine) + t("piles", "box", "Hromádky", out) + t("family", "users", "Rodina", "");
   }
 
   function renderScreen(){
     const el = $("#scroll");
     const banner = DB.isExample()
       ? `<div class="demobanner"><span>Hraješ na ukázkových datech.</span><button data-act="settings">Vymazat</button></div>` : "";
-    el.className = "scroll" + (tab === "stack" ? " scroll--stack" : "");
-    if (tab === "stack"){
-      const parts = stackParts();
-      const cur = el.querySelector(".cardstack");
-      // stejné karty nahoře → nechat DOM karty být (žádné problikávání fotky), překreslit jen okolí
-      if (parts.ids && cur && cur.dataset.ids === parts.ids){
-        el.querySelector("#qf").innerHTML = parts.filter;
-        el.querySelector("#sub").innerHTML = parts.subrow;
-        return;
-      }
-      el.innerHTML = banner + `<div id="qf">${parts.filter}</div>` + parts.stage + `<div id="sub">${parts.subrow}</div>`;
-      if (parts.enter){ const top = el.querySelector(".card--top"); if (top) top.classList.add("card--enter"); }
-      wireCard(); fitStack();
-    }
+    const deck = activeDeck();
+    el.className = "scroll" + (deck ? " scroll--stack" : "");
+    if (deck) renderDeck(el, deck, banner);
     else if (tab === "piles") el.innerHTML = banner + pilesScreen();
     else el.innerHTML = banner + familyScreen();
   }
 
-  // výška karty tak, aby se stack vešel na obrazovku bez scrollování
+  // Deck: hlavička/filtr nahoře, karta, spodní řádek. Karta se překreslí jen když se změní, co je nahoře.
+  function renderDeck(el, deck, banner){
+    const parts = deckParts(deck);
+    const cur = el.querySelector(".cardstack");
+    if (parts.ids && cur && cur.dataset.ids === parts.ids){
+      el.querySelector("#qf").innerHTML = parts.head;
+      el.querySelector("#sub").innerHTML = parts.subrow;
+      return;
+    }
+    el.innerHTML = banner + `<div id="qf">${parts.head}</div>` + parts.stage + `<div id="sub">${parts.subrow}</div>`;
+    if (parts.enter){ const top = el.querySelector(".card--top"); if (top) top.classList.add("card--enter"); }
+    wireCard(deck); fitStack();
+  }
+
   function fitStack(){
     const stack = $(".cardstack"); if (!stack) return;
     const el = $("#scroll");
-    // vše ostatní (včetně marginů) = celkový obsah minus aktuální výška karty
-    const other = el.scrollHeight - stack.offsetHeight;
+    const other = el.scrollHeight - stack.offsetHeight;      // vše ostatní včetně marginů
     const avail = el.clientHeight - other - 4;
     stack.style.height = Math.max(300, Math.min(600, avail)) + "px";
-    // když se stack vejde bez scrollování, karta smí reagovat i na svislý tah (k hornímu/dolnímu rohu);
-    // jinak svisle scrolluje stránka a rozhoduje se jen vodorovně nebo tlačítky
-    const card = $(".card--top");
-    if (card) card.style.touchAction = (el.scrollHeight <= el.clientHeight + 1) ? "none" : "pan-y";
   }
-  addEventListener("resize", () => { if (tab === "stack") fitStack(); });
+  addEventListener("resize", () => { if (activeDeck()) fitStack(); });
 
-  /* ---------- Stack ---------- */
-  // Karta = celá fotka; čtyři rohy = čtyři rozhodnutí (↖ nechat, ↗ prodat, ↙ vyhodit, ↘ darovat)
-  function cardMarkup(it, top){
+  function cardMarkup(it, top, deck){
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
@@ -242,15 +255,16 @@
     const ownerTag = owner
       ? `<span class="tag tag--owner" style="--oc:${avColor(owner)}"><i></i>${owner.id === meId ? "Moje" : esc(owner.name)}</span>`
       : `<span class="tag">Společné</span>`;
-    const corners = top ? `
-      <button class="corner corner--tl" data-decide="keep"   style="--h:var(--keep);--edge:var(--keep-dark)">${ic("home")}Nechat</button>
-      <button class="corner corner--tr" data-decide="sell"   style="--h:var(--sell);--edge:var(--sell-dark)">${ic("tag")}Prodat</button>
-      <button class="corner corner--bl" data-decide="trash"  style="--h:var(--trash);--edge:var(--trash-dark)">${ic("bin")}Vyhodit</button>
-      <button class="corner corner--br" data-decide="donate" style="--h:var(--donate);--edge:var(--donate-dark)">${ic("gift")}Darovat</button>` : "";
+    let buttons = "";
+    if (top){
+      const rec = deck.star ? (e.channel === "sell" ? "sell" : "trash") : null;   // doporučení v 2. kole
+      const btn = (key, side) => { const d = DEC[key]; return `<button class="corner corner--${side} ${rec === key ? "rec" : ""}" data-decide="${key}" style="--h:var(${d.cvar});--edge:var(${d.dark})">${ic(d.icon)}${d.label}${rec === key ? `<span class="star">${ic("sparkle")}</span>` : ""}</button>`; };
+      buttons = btn(deck.left, "bl") + btn(deck.right, "br");
+    }
     return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
       <div class="card__photo">${photo}</div>
       <div class="card__veil"></div>
-      ${corners}
+      ${buttons}
       <div class="card__cap">
         <div class="card__caprow">
           <span class="price"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span>${kcR(e.lo, e.hi)}${e.ai ? ic("sparkle") : ""}</span>
@@ -263,48 +277,61 @@
     </article>`;
   }
 
-  function stackParts(){
-    const all = pendingAll(), mine = myPending(), pend = pending();
-    const filter = all.length ? `<div class="qfilter"><div class="segment">
-        <button type="button" class="seg" data-queue="mine" aria-pressed="${queueMode==="mine"}">Moje · ${mine.length}</button>
-        <button type="button" class="seg" data-queue="all" aria-pressed="${queueMode==="all"}">Všechny · ${all.length}</button>
-      </div></div>` : "";
-    const done = decidedTodayByMe();
-    if (!pend.length){
-      lastTopId = null;
-      const stage = (queueMode === "mine" && all.length)
-        ? `<div class="emptystate">
-          <div class="big">${ic("check")}</div>
-          <h3>Čistý stůl!</h3>
-          <p>${done ? `Dnes vyřízeno ${done}. ` : ""}Tvoje věci mají jasno. Ostatním ještě zbývá ${nVeci(all.length)}.</p>
-          <button class="btn btn--ghost" data-queue="all" style="margin-top:14px">Pomoct ostatním</button>
-        </div>`
-        : `<div class="emptystate">
-          <div class="big">${ic("check")}</div>
-          <h3>Stack je prázdný!</h3>
-          <p>Každá věc má jasno. Vyfoť další tlačítkem <b>+</b> nahoře.</p>
-        </div>`;
-      return { filter, stage, subrow: "", ids: null, enter: false };
+  function deckParts(deck){
+    const list = deck.items();
+    let head = "";
+    if (deck.name === "stack"){
+      const all = pendingAll(), mine = myPending();
+      head = all.length ? `<div class="qfilter"><div class="segment">
+          <button type="button" class="seg" data-queue="mine" aria-pressed="${queueMode==="mine"}">Moje · ${mine.length}</button>
+          <button type="button" class="seg" data-queue="all" aria-pressed="${queueMode==="all"}">Všechny · ${all.length}</button>
+        </div></div>` : "";
+    } else {
+      head = `<div class="deckhead"><button class="linkbtn" data-act="unsort-view">${ic("back")}Hromádky</button><b>Roztřídit · ${nVeci(list.length)}</b></div>`;
     }
-    const ids = pend.slice(0, 2).map(i => i.id).join(",");
-    const enter = lastTopId !== null && pend[0].id !== lastTopId;   // nová karta nahoře → krátký nástup
-    lastTopId = pend[0].id;
+    if (!list.length){
+      lastTop[deck.name] = null;
+      let stage;
+      if (deck.name === "sort"){
+        stage = `<div class="emptystate"><div class="big">${ic("check")}</div><h3>Vše roztříděno!</h3>
+          <p>Každá věc na odchodu ví, kam půjde.</p>
+          <button class="btn btn--ghost" data-act="unsort-view" style="margin-top:14px">Zpět na hromádky</button></div>`;
+      } else if (queueMode === "mine" && pendingAll().length){
+        const done = decidedTodayByMe();
+        stage = `<div class="emptystate"><div class="big">${ic("check")}</div><h3>Čistý stůl!</h3>
+          <p>${done ? `Dnes vyřízeno ${done}. ` : ""}Tvoje věci mají jasno. Ostatním ještě zbývá ${nVeci(pendingAll().length)}.</p>
+          <button class="btn btn--ghost" data-queue="all" style="margin-top:14px">Pomoct ostatním</button></div>`;
+      } else {
+        stage = `<div class="emptystate"><div class="big">${ic("check")}</div><h3>Stack je prázdný!</h3>
+          <p>Každá věc má jasno. Vyfoť další tlačítkem <b>+</b> nahoře.</p></div>`;
+      }
+      return { head, stage, subrow: "", ids: null, enter: false };
+    }
+    const ids = deck.name + ":" + list.slice(0, 2).map(i => i.id).join(",");
+    const enter = lastTop[deck.name] !== null && list[0].id !== lastTop[deck.name];
+    lastTop[deck.name] = list[0].id;
     const cards = [];
-    if (pend[1]) cards.push(cardMarkup(pend[1], false));
-    cards.push(cardMarkup(pend[0], true));
-    const hint = !seenHint() ? `<div class="hint">${ic("arrows")} Táhni kartu k rohu, nebo ťukni na tlačítko v rohu</div>` : "";
+    if (list[1]) cards.push(cardMarkup(list[1], false, deck));
+    cards.push(cardMarkup(list[0], true, deck));
+    const showHint = deck.name === "sort" ? !localStorage.getItem("vs.seenHint2") : !seenHint();
+    const hint = showHint ? `<div class="hint">${ic("arrows")} ${deck.hint}</div>` : "";
     const stage = `<div class="stage"><div class="blob"></div><div class="cardstack" data-ids="${ids}">${cards.join("")}${hint}</div></div>`;
-    const subrow = `<div class="subrow">
-        <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
-        <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
-      </div>`;
-    return { filter, stage, subrow, ids, enter };
+    const subrow = deck.name === "stack"
+      ? `<div class="subrow"><button class="linkbtn" data-decide="maybe">${ic("clock")}Ještě nevím → krabice na rok</button><button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button></div>`
+      : `<div class="subrow"><button class="linkbtn" data-return="${list[0].id}">${ic("layers")}Vrátit do stacku</button><button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button></div>`;
+    return { head, stage, subrow, ids, enter };
   }
 
   /* ---------- Hromádky ---------- */
   function pilesScreen(){
-    const rows = [["keep","Nechat"],["sell","Prodat"],["donate","Darovat"],["trash","Vyhodit"]]
-      .map(([k,l]) => `<button class="pile" style="--h:var(${DEC[k].cvar})" data-pile="${k}"><b>${countBy(k)}</b><span>${l}</span></button>`).join("");
+    const out = outItems().length;
+    const tile = out
+      ? `<div class="outtile"><div><b>Zbavit se · ${nVeci(out)}</b><span>Rozhodni u každé, jestli se vyplatí prodat, nebo ji vyhodit (případně darovat mimo appku).</span></div>
+         <button class="btn btn--accent press" data-act="sort">${ic("arrows")}Roztřídit</button></div>`
+      : `<div class="outtile outtile--empty"><div><b>Zbavit se · 0</b><span>Nic k roztřídění — vše, co jde pryč, už má jasno.</span></div></div>`;
+    const keys = [["keep","Nechat"],["sell","Prodat"],["trash","Vyhodit"]];
+    if (countBy("donate")) keys.push(["donate","Darovat"]);
+    const rows = keys.map(([k,l]) => `<button class="pile" style="--h:var(${DEC[k].cvar})" data-pile="${k}"><b>${countBy(k)}</b><span>${l}</span></button>`).join("");
     const maybeItems = items().filter(i => i.decision === "maybe");
     let year = "";
     if (maybeItems.length){
@@ -316,12 +343,12 @@
     }
     const sell = items().filter(i => i.decision === "sell");
     const tot = sell.reduce((a,i) => { const e = estimateFor(i); return {lo:a.lo+e.lo, hi:a.hi+e.hi}; }, {lo:0,hi:0});
-    const decided = items().filter(i => i.decision && i.decision !== "maybe").length;
     return `<div class="sec">
-      <h2>Rozhodnuto <small>${nVeci(decided)}</small></h2>
-      <div class="pilerow">${rows}</div>${year}
+      ${tile}
+      <h2 style="margin-top:18px">Rozhodnuto</h2>
+      <div class="pilerow pilerow--${keys.length}">${rows}</div>${year}
       ${sell.length ? `<div class="summary"><span>${ic("tag")}Odhadovaný výtěžek z prodeje</span><b>${kcR(tot.lo, tot.hi)}</b></div>` : ""}
-      <p class="help">Ťukni na hromádku — uvidíš seznam, vrátíš věc do stacku nebo ji upravíš. Seznam „Prodat" a „Darovat" jde zkopírovat.</p>
+      <p class="help">Ťukni na hromádku — uvidíš seznam, vrátíš věc o krok zpět nebo ji upravíš. Seznam „Prodat" jde zkopírovat.</p>
     </div>`;
   }
 
@@ -352,22 +379,16 @@
     </div>`;
   }
 
-  /* ---------- karta: tažení k rohu ---------- */
-  // směr tahu → roh: vodorovně doprava = prodat (↗), doleva = vyhodit (↙); svisle nahoru = nechat (↖), dolů = darovat (↘)
-  function wireCard(){
+  /* ---------- karta: vodorovný tah ---------- */
+  function wireCard(deck){
     const card = $(".card--top");
     if (!card) return;
-    const corners = { keep: card.querySelector(".corner--tl"), sell: card.querySelector(".corner--tr"), trash: card.querySelector(".corner--bl"), donate: card.querySelector(".corner--br") };
+    const corners = { [deck.left]: card.querySelector(".corner--bl"), [deck.right]: card.querySelector(".corner--br") };
     let sx=0, sy=0, dx=0, dy=0, dragging=false, t0=0, onPhoto=false;
-    const vertOk = () => card.style.touchAction === "none";        // svislý tah jen když se nic nescrolluje
-    const dirOf = () => {
-      if (Math.abs(dx) >= Math.abs(dy) || !vertOk()) return dx > 0 ? "sell" : "trash";
-      return dy < 0 ? "keep" : "donate";
-    };
-    const distOf = () => (Math.abs(dx) >= Math.abs(dy) || !vertOk()) ? Math.abs(dx) : Math.abs(dy);
+    const dirOf = () => dx > 0 ? deck.right : deck.left;
     const clearHot = () => { card.classList.remove("dragging"); Object.values(corners).forEach(c => c && c.classList.remove("hot")); };
     card.addEventListener("pointerdown", e => {
-      if (e.target.closest("button")) return;                    // rohy a tužka: žádný drag
+      if (e.target.closest("button")) return;
       dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; t0 = Date.now();
       onPhoto = !!e.target.closest(".card__photo");
       card.setPointerCapture(e.pointerId); card.style.transition = "none";
@@ -376,9 +397,8 @@
     const apply = () => {
       raf = 0;
       if (!dragging) return;
-      const ty = vertOk() ? dy : 0;
-      card.style.transform = `translate3d(${dx}px,${ty}px,0) rotate(${dx*0.05}deg)`;
-      const d = dirOf(), dist = distOf();
+      card.style.transform = `translate3d(${dx}px,0,0) rotate(${dx*0.05}deg)`;
+      const d = dirOf(), dist = Math.abs(dx);
       const isDrag = dist > 24, hk = isDrag ? d : null;
       if (isDrag !== wasDragging){ card.classList.toggle("dragging", isDrag); wasDragging = isDrag; }
       if (hk !== hotKey){ Object.entries(corners).forEach(([k, c]) => c && c.classList.toggle("hot", k === hk)); hotKey = hk; }
@@ -391,8 +411,7 @@
     const end = () => {
       if (!dragging) return;
       dragging = false;
-      const d = dirOf(), dist = distOf();
-      if (dist > 92) flyOut(card, d, dx, vertOk() ? dy : 0);
+      if (Math.abs(dx) > 92) flyOut(card, dirOf(), dx, deck);
       else {
         card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearHot();
         const img = card.querySelector(".card__photo img.fg");
@@ -402,44 +421,47 @@
     card.addEventListener("pointerup", end);
     card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearHot(); });
     card.addEventListener("keydown", e => {
-      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe", ArrowUp:"keep", ArrowRight:"sell", ArrowDown:"donate", ArrowLeft:"trash"};
+      const map = { ArrowRight: deck.right, ArrowLeft: deck.left, "1": deck.left, "2": deck.right };
+      if (deck.name === "stack") map["5"] = "maybe";
       if (map[e.key]){ e.preventDefault(); e.stopPropagation(); pressDecide(map[e.key]); }
     });
   }
-  function flyOut(card, decision, dx, dy){
+  function flyOut(card, decision, dx, deck){
     if (animating) return;
     animating = true;
-    if (RM){ decide(decision); return; }
-    const ux = dx || (decision==="sell"?1:decision==="trash"?-1:0);
-    const uy = dy || (decision==="keep"?-1:(decision==="donate"||decision==="maybe")?1:0);
-    const m = 760 / (Math.hypot(ux,uy) || 1);
+    if (RM){ decide(decision, deck); return; }
+    const ux = dx || (decision === deck.right ? 1 : -1);
+    const uy = decision === "maybe" ? 1 : 0;
+    const m = 760 / (Math.hypot(ux, uy) || 1);
     card.style.transition = "transform .34s ease-out, opacity .34s ease-out";
-    card.style.transform = `translate(${ux*m}px,${uy*m}px) rotate(${(dx||ux*40)*0.08}deg)`;
+    card.style.transform = `translate3d(${ux*m}px,${uy*m}px,0) rotate(${(dx||ux*40)*0.08}deg)`;
     card.style.opacity = "0";
     let done = false;
-    const go = () => { if (done) return; done = true; decide(decision); };
+    const go = () => { if (done) return; done = true; decide(decision, deck); };
     card.addEventListener("transitionend", go, {once:true});
     setTimeout(go, 420);
   }
   function pressDecide(decision){
-    if (animating) return;
+    const deck = activeDeck(); if (!deck || animating) return;
     const card = $(".card--top");
-    if (!card || RM){ decide(decision); return; }
-    const v = {keep:[0,-1], sell:[1,0], donate:[0,1], trash:[-1,0], maybe:[0,1]}[decision] || [1,0];
-    flyOut(card, decision, v[0]*120, v[1]*120);
+    if (!card || RM){ decide(decision, deck); return; }
+    flyOut(card, decision, decision === "maybe" ? 0 : (decision === deck.right ? 120 : -120), deck);
   }
 
-  async function decide(decision){
-    const it = pending()[0], p = me();
+  // 1. kolo (stack): keep / out / maybe · 2. kolo (sort): sell / trash
+  async function decide(decision, deck){
+    const it = deck.items()[0], p = me();
     if (!it || !p){ animating = false; return; }
-    const gain = 10;
+    const gain = deck.xp;
     const beforeLv = levelOf(p.xp).idx;
-    localStorage.setItem("vs.seenHint", "1");
+    localStorage.setItem(deck.name === "sort" ? "vs.seenHint2" : "vs.seenHint", "1");
     if (pinId === it.id) pinId = null;
     optimistic.add(it.id); animating = false; render();             // další karta hned, DB dobíhá na pozadí
-    toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", () => undo(it.id, p.id, gain));
+    const undoFn = deck.name === "sort" ? () => undoSort(it.id, p.id, gain) : () => undo(it.id, p.id, gain);
+    toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", undoFn);
     try {
-      await DB.decideItem(it.id, decision, p.id);
+      if (deck.name === "sort") await DB.sortItem(it.id, decision, p.id);
+      else await DB.decideItem(it.id, decision, p.id);
       const after = await DB.awardXp(p.id, gain);
       await DB.touchStreak(p.id);
       optimistic.delete(it.id); render();
@@ -448,6 +470,10 @@
   }
   async function undo(itemId, playerId, gain){
     try { await DB.returnItem(itemId); await DB.awardXp(playerId, -gain); render(); }
+    catch(e){ toast("Zpět se nepovedlo: " + e.message); }
+  }
+  async function undoSort(itemId, playerId, gain){
+    try { await DB.unsortItem(itemId); await DB.awardXp(playerId, -gain); render(); }
     catch(e){ toast("Zpět se nepovedlo: " + e.message); }
   }
 
@@ -679,20 +705,23 @@
     if (key === "sell"){
       const tot = list.reduce((a,i) => { const e = estimateFor(i); return {lo:a.lo+e.lo, hi:a.hi+e.hi}; }, {lo:0,hi:0});
       head = list.length ? `<p class="sub">Odhadovaný výtěžek celkem <b style="color:var(--green-ink)">${kcR(tot.lo, tot.hi)}</b>.</p>` : "";
-    } else if (key === "donate") head = `<p class="sub">Textil → kontejner Diakonie / charita. Hračky a knihy → místní sbírka nebo Knihobudka.</p>`;
-    else if (key === "trash") head = `<p class="sub">Textil patří do kontejneru na textil, elektro do sběrného dvora — ne do směsného.</p>`;
+    } else if (key === "trash") head = `<p class="sub">Co nemá cenu prodávat: vyhodit (textil do kontejneru, elektro do sběrného dvora) nebo darovat mimo appku.</p>`;
+    else if (key === "out") head = `<p class="sub">Čeká na 2. kolo — prodat, nebo vyhodit. Roztřídíš tlačítkem nahoře.</p>`;
+    else if (key === "donate") head = `<p class="sub">Starší hromádka — nové věci už jdou jen do Prodat / Vyhodit.</p>`;
     else if (isMaybe) head = `<p class="sub">Co se za půl roku ani nehne, to nejspíš nepotřebuješ.</p>`;
     const rows = list.map(i => {
       const c = CAT[i.cat] || CAT.jine;
       const e = estimateFor(i);
-      const by = players().find(p => p.id === i.decided_by);
+      const by = players().find(p => p.id === (i.sorted_by || i.decided_by));
       let sub = (key === "sell" ? kcR(e.lo, e.hi) : c.short) + (by ? " · " + esc(by.name) : "");
-      let action = `<button class="li__b" data-return="${i.id}">Zpět do stacku</button>`;
+      // krok zpět: z prodat/vyhodit/darovat → zpět k roztřídění; z nechat/zbavit se → zpět do stacku
+      let action = (key === "sell" || key === "trash" || key === "donate")
+        ? `<button class="li__b" data-unsort="${i.id}">Zpět k roztřídění</button>`
+        : `<button class="li__b" data-return="${i.id}">Zpět do stacku</button>`;
       if (isMaybe){
         const over = i.review_at && new Date(i.review_at).getTime() < Date.now();
         sub = over ? "leží tu už " + Math.round((Date.now() - (new Date(i.review_at).getTime() - 182*DAY)) / DAY) + " dní" : "připomene se " + new Date(i.review_at).toLocaleDateString("cs-CZ");
-        // Rozhodnout = vrátit do stacku a rovnou tam skočit (všechny čtyři možnosti); Darovat = zkratka
-        action = `<button class="li__b" data-return="${i.id}" data-jump="1">Rozhodnout</button><button class="li__b" data-move="donate:${i.id}" style="background:var(--salmon-soft);color:var(--salmon)">Darovat</button>`;
+        action = `<button class="li__b" data-return="${i.id}" data-jump="1">Rozhodnout</button><button class="li__b" data-move="out:${i.id}" style="background:var(--salmon-soft);color:var(--salmon)">Zbavit se</button>`;
       }
       const url = DB.photoUrl(i);
       return `<div class="li">
@@ -836,10 +865,13 @@
           if (it && it.owner_id !== meId) setQueue("all");
           pinId = ret.dataset.return;
           forceCloseSheet(); setTab("stack"); render();
-        } else { render(); if (curPileKey) sheetPile(curPileKey); }
+        } else if (ret.closest(".sheet")){ render(); if (curPileKey) sheetPile(curPileKey); }
+        else render();
       } catch(err){ toast(err.message); }
       return;
     }
+    const us = e.target.closest("[data-unsort]");
+    if (us){ try { await DB.unsortItem(us.dataset.unsort); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
     const mv = e.target.closest("[data-move]");
     if (mv){ const [d, id] = mv.dataset.move.split(":"); try { await DB.decideItem(id, d, meId); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
     const dec = e.target.closest("[data-decide]");
@@ -850,23 +882,24 @@
     if (!act) return;
     const a = act.dataset.act;
     if (a === "add") sheetItemForm(null);
+    else if (a === "sort"){ sorting = true; skipped = []; render(); }
+    else if (a === "unsort-view"){ sorting = false; render(); }
     else if (a === "players") sheetPickPlayer(false);
     else if (a === "household") sheetHousehold();
     else if (a === "settings") sheetSettings();
     else if (a === "close") closeSheet();
     else if (a === "skip"){
-      const list = pending(), it = list[0];
-      if (it && list.length > 1){
-        if (!skipped.includes(it.id)) skipped.push(it.id);
-        if (list.every(x => skipped.includes(x.id))) skipped = [];   // všechny přeskočené → kolo odznovu
-        render();
-      }
+      const deck = activeDeck(); if (!deck) return;
+      const list = deck.items(); const it = list[0];
+      if (it && list.length > 1){ skipped.push(it.id); if (skipped.length >= list.length) skipped = []; render(); }
     }
   });
   document.addEventListener("keydown", e => {
     if (modalRoot.innerHTML || document.activeElement?.classList.contains("input")) return;
-    const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe"};
-    if (map[e.key] && tab === "stack" && pending().length){ e.preventDefault(); pressDecide(map[e.key]); }
+    const deck = activeDeck(); if (!deck || !deck.items().length) return;
+    const map = { "1": deck.left, "2": deck.right, ArrowLeft: deck.left, ArrowRight: deck.right };
+    if (deck.name === "stack") map["5"] = "maybe";
+    if (map[e.key]){ e.preventDefault(); pressDecide(map[e.key]); }
   });
 
   /* ---------- start ---------- */
