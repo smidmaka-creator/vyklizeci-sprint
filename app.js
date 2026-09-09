@@ -1,10 +1,11 @@
 /* ============================================================
    app.js — UI a herní logika Vyklízecího sprintu
    Data řeší db.js (LocalDB / RemoteDB), tady jen render + akce.
+   Tři záložky: Stack (karta) · Hromádky (rozhodnuto) · Rodina (žebříček).
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.6.0 · 9. 9. 2026";
+  const APP_VERSION = "0.7.0 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -12,6 +13,7 @@
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
   const plural = (n, a) => a[n === 1 ? 0 : (n >= 2 && n <= 4 ? 1 : 2)];
   const nVeci = n => n + " " + plural(n, ["věc", "věci", "věcí"]);
+  const nCekaji = n => n + " " + plural(n, ["čeká", "čekají", "čeká"]);
   const { streakAlive } = window.VS_DB;
 
   /* ---------- ikony ---------- */
@@ -43,8 +45,10 @@
     wifi:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01"/>',
     sparkle:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
     pencil:'<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17zM13 8l3 3"/>',
-    zoom:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
     refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
+    zoom:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
+    layers:'<path d="M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5"/>',
+    arrows:'<path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
   };
   const ic = (n, cls="") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||""}</svg>`;
 
@@ -80,7 +84,6 @@
     {min:0,name:"Nováček"},{min:150,name:"Vyklízeč"},{min:400,name:"Uklizeno"},
     {min:850,name:"Minimalista"},{min:1500,name:"Mistr prostoru"},
   ];
-  const ZONES = ["Skříň","Dětský pokoj","Kuchyň","Koupelna","Chodba","Sklep / komora","Celý byt"];
   const AV_COLORS = ["var(--green)","var(--salmon)","var(--keep)","var(--gold)","var(--maybe)","var(--trash)"];
 
   // midOverride: ručně zadaná cena → doporučení se spočítá k ní, ne k tabulce
@@ -99,7 +102,7 @@
     else { advice = "Vyšší hodnota — zkus Bazoš / Marketplace."; channel = "sell"; }
     return {lo, hi, mid, advice, channel};
   }
-  // odhad pro konkrétní věc: přednost má AI odhad z fotky uložený na věci, jinak heuristika
+  // odhad pro konkrétní věc: přednost má cena uložená na věci (AI / ručně), jinak heuristika
   function estimateFor(it){
     if (it.price_lo != null && it.price_hi != null){
       const h = estimate(it.cat, it.cond);
@@ -122,7 +125,7 @@
   let meId = null;
   let animating = false;
   let curPileKey = null;
-  let sprintTimer = null;
+  let tab = localStorage.getItem("vs.tab") || "stack";
   const seenHint = () => localStorage.getItem("vs.seenHint") === "1";
   const playerKey = () => "vs.player." + (DB.household ? DB.household.id : "local");
 
@@ -136,25 +139,20 @@
   const pending = () => queueMode === "mine" ? myPending() : pendingAll();
   const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
   const decidedTodayByMe = () => items().filter(i => i.decided_by === meId && i.decided_at && new Date(i.decided_at).getTime() >= startOfToday()).length;
-  const nCekaji = n => n + " " + plural(n, ["čeká", "čekají", "čeká"]);
   function setQueue(mode){ queueMode = mode; localStorage.setItem("vs.queue", mode); }
+  function setTab(t){ tab = t; localStorage.setItem("vs.tab", t); }
   const countBy = d => items().filter(i => i.decision === d).length;
   const me = () => players().find(p => p.id === meId) || null;
   const initials = n => (String(n).trim()[0] || "?").toUpperCase();
   const avColor = p => AV_COLORS[(p.color ?? Math.max(0, players().indexOf(p))) % AV_COLORS.length];
-  const activeSprints = () => DB.sprints().filter(s => !s.ended_at && new Date(s.ends_at).getTime() > Date.now());
-  const mySprint = () => activeSprints().find(s => s.player_id === meId) || null;
-  const secondsLeft = s => Math.max(0, Math.round((new Date(s.ends_at).getTime() - Date.now()) / 1000));
-  const fmtClock = s => Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
 
   /* ---------- render ---------- */
   function render(){
     if (!ready) return;
-    if (!me()){ renderTopbar(); $("#scroll").innerHTML = ""; renderDock(); if (!$(".overlay")) sheetPickPlayer(true); return; }
     renderTopbar();
-    renderScroll();
-    renderDock();
-    syncSprintTimer();
+    if (!me()){ $("#scroll").innerHTML = ""; $("#tabbar").innerHTML = ""; if (!$(".overlay")) sheetPickPlayer(true); return; }
+    renderScreen();
+    renderTabbar();
   }
 
   function renderTopbar(){
@@ -165,8 +163,7 @@
     $("#topbar").innerHTML = `
       <div class="topbar__row">
         <div class="wordmark">${ic("leaf")} Vyklízecí <em>sprint</em></div>
-        ${DB.mode === "remote" ? `<button class="iconbtn" data-act="household" aria-label="Domácnost" title="${esc(DB.household?.name || "")}">${ic("users")}</button>` : ""}
-        <button class="iconbtn" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>
+        <button class="iconbtn iconbtn--solid" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>
         <button class="iconbtn" data-act="settings" aria-label="Nastavení">${ic("gear")}</button>
       </div>
       <div class="statrow">
@@ -181,38 +178,59 @@
       </div>`;
   }
 
+  function renderTabbar(){
+    const mine = myPending().length;
+    const t = (id, icon, label, badge) => `<button class="tab ${tab===id?"on":""}" data-tab="${id}">${ic(icon)}<span>${label}</span>${badge ? `<b class="badge">${badge}</b>` : ""}</button>`;
+    $("#tabbar").innerHTML = t("stack", "layers", "Stack", mine) + t("piles", "box", "Hromádky", "") + t("family", "users", "Rodina", "");
+  }
+
+  function renderScreen(){
+    const el = $("#scroll");
+    const banner = DB.isExample()
+      ? `<div class="demobanner"><span>Hraješ na ukázkových datech.</span><button data-act="settings">Vymazat</button></div>` : "";
+    el.className = "scroll" + (tab === "stack" ? " scroll--stack" : "");
+    if (tab === "stack"){ el.innerHTML = banner + stackScreen(); wireCard(); fitStack(); }
+    else if (tab === "piles") el.innerHTML = banner + pilesScreen();
+    else el.innerHTML = banner + familyScreen();
+  }
+
+  // výška karty tak, aby se stack vešel na obrazovku bez scrollování
+  function fitStack(){
+    const stack = $(".cardstack"); if (!stack) return;
+    const el = $("#scroll");
+    // vše ostatní (včetně marginů) = celkový obsah minus aktuální výška karty
+    const other = el.scrollHeight - stack.offsetHeight;
+    const avail = el.clientHeight - other - 4;
+    stack.style.height = Math.max(220, Math.min(420, avail)) + "px";
+  }
+  addEventListener("resize", () => { if (tab === "stack") fitStack(); });
+
+  /* ---------- Stack ---------- */
   function cardMarkup(it, top){
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
-    const photo = url ? `<img src="${esc(url)}" alt="" loading="lazy">${top ? `<span class="zoomhint" aria-hidden="true">${ic("zoom")}</span>` : ""}` : `<span class="bigic">${ic(c.icon)}</span>`;
-    const stamps = top ? `
-      <div class="stamp" data-dir="keep">Nechat</div>
-      <div class="stamp" data-dir="sell">Prodat</div>
-      <div class="stamp" data-dir="trash">Vyhodit</div>
-      <div class="stamp" data-dir="donate">Darovat</div>` : "";
+    const photo = url ? `<img src="${esc(url)}" alt="" loading="lazy">` : `<span class="bigic">${ic(c.icon)}</span>`;
+    const stamps = top ? `<div class="stamp" data-dir="sell">Prodat</div><div class="stamp" data-dir="trash">Vyhodit</div>` : "";
+    const editBtn = top ? `<button class="card__edit" data-edit="${it.id}" aria-label="Upravit">${ic("pencil")}</button>` : "";
     const owner = players().find(p => p.id === it.owner_id);
-    const byTag = owner
+    const ownerTag = owner
       ? `<span class="tag tag--owner" style="--oc:${avColor(owner)}"><i></i>${owner.id === meId ? "Moje" : esc(owner.name)}</span>`
       : `<span class="tag">Společné</span>`;
     return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
       <div class="card__photo">${photo}
         <span class="price"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span>${kcR(e.lo, e.hi)}${e.ai ? ic("sparkle") : ""}</span>
-        ${stamps}
+        ${editBtn}${stamps}
       </div>
       <div class="card__body">
         <div class="card__name">${esc(it.name)}</div>
-        <div class="tags">
-          <span class="tag">${ic(c.icon)}${esc(c.short)}</span>
-          <span class="tag">${esc((COND[it.cond]||COND.dobre).label)}</span>
-          ${byTag}
-        </div>
+        <div class="tags">${ownerTag}<span class="tag">${ic(c.icon)}${esc(c.short)}</span><span class="tag">${esc((COND[it.cond]||COND.dobre).label)}</span></div>
         <div class="advice">${esc(e.advice)}</div>
       </div>
     </article>`;
   }
 
-  function stageMarkup(){
+  function stackScreen(){
     const all = pendingAll(), mine = myPending(), pend = pending();
     const filter = all.length ? `<div class="qfilter"><div class="segment">
         <button type="button" class="seg" data-queue="mine" aria-pressed="${queueMode==="mine"}">Moje · ${mine.length}</button>
@@ -234,28 +252,28 @@
       return filter + `<div class="emptystate">
         <div class="big">${ic("check")}</div>
         <h3>Stack je prázdný!</h3>
-        <p>Každá věc má jasno. Přidej další, nebo si dej vyklízecí sprint.</p>
+        <p>Každá věc má jasno. Vyfoť další tlačítkem <b>+</b> nahoře.</p>
       </div>`;
     }
     const cards = [];
     if (pend[1]) cards.push(cardMarkup(pend[1], false));
     cards.push(cardMarkup(pend[0], true));
-    const hint = !seenHint() ? `<div class="hint">Táhni kartu do stran, nebo ťukni na volbu níž</div>` : "";
+    const hint = !seenHint() ? `<div class="hint">${ic("arrows")} doleva vyhodit · doprava prodat · nebo ťukni</div>` : "";
     return filter + banner + `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
       <div class="decisions">
-        <button class="dbtn press" style="--h:var(--keep);--edge:var(--keep-dark)"     data-decide="keep">${ic("home")}Nechat<small>${nVeci(countBy("keep"))}</small></button>
-        <button class="dbtn press" style="--h:var(--sell);--edge:var(--sell-dark)"     data-decide="sell">${ic("tag")}Prodat<small>${nVeci(countBy("sell"))}</small></button>
-        <button class="dbtn press" style="--h:var(--donate);--edge:var(--donate-dark)" data-decide="donate">${ic("gift")}Darovat<small>${nVeci(countBy("donate"))}</small></button>
-        <button class="dbtn press" style="--h:var(--trash);--edge:var(--trash-dark)"   data-decide="trash">${ic("bin")}Vyhodit<small>${nVeci(countBy("trash"))}</small></button>
+        <button class="dbtn press" style="--h:var(--keep);--edge:var(--keep-dark)"     data-decide="keep">${ic("home")}Nechat</button>
+        <button class="dbtn press" style="--h:var(--sell);--edge:var(--sell-dark)"     data-decide="sell">${ic("tag")}Prodat</button>
+        <button class="dbtn press" style="--h:var(--donate);--edge:var(--donate-dark)" data-decide="donate">${ic("gift")}Darovat</button>
+        <button class="dbtn press" style="--h:var(--trash);--edge:var(--trash-dark)"   data-decide="trash">${ic("bin")}Vyhodit</button>
       </div>
       <div class="subrow">
         <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
-        <button class="linkbtn" data-act="edit">${ic("pencil")}Upravit</button>
         <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
       </div>`;
   }
 
-  function pilesMarkup(){
+  /* ---------- Hromádky ---------- */
+  function pilesScreen(){
     const rows = [["keep","Nechat"],["sell","Prodat"],["donate","Darovat"],["trash","Vyhodit"]]
       .map(([k,l]) => `<button class="pile" style="--h:var(${DEC[k].cvar})" data-pile="${k}"><b>${countBy(k)}</b><span>${l}</span></button>`).join("");
     const maybeItems = items().filter(i => i.decision === "maybe");
@@ -263,96 +281,83 @@
     if (maybeItems.length){
       const overdue = maybeItems.filter(i => i.review_at && new Date(i.review_at).getTime() < Date.now()).length;
       year = `<button class="yearbox ${overdue?"warn":""}" data-pile="maybe">
-        <span>
-          <span class="t">Krabice na rok · ${nVeci(maybeItems.length)}</span>
-          <span class="s">${overdue ? overdue+" čeká moc dlouho — čas rozhodnout" : "Připomene se, až uplyne půl roku"}</span>
-        </span><span class="go">→</span></button>`;
+        <span><span class="t">Krabice na rok · ${nVeci(maybeItems.length)}</span>
+        <span class="s">${overdue ? overdue+" čeká moc dlouho — čas rozhodnout" : "Připomene se, až uplyne půl roku"}</span></span>
+        <span class="go">→</span></button>`;
     }
-    return `<div class="sec"><h2>Rozhodnuto</h2><div class="pilerow">${rows}</div>${year}</div>`;
+    const sell = items().filter(i => i.decision === "sell");
+    const tot = sell.reduce((a,i) => { const e = estimateFor(i); return {lo:a.lo+e.lo, hi:a.hi+e.hi}; }, {lo:0,hi:0});
+    const decided = items().filter(i => i.decision && i.decision !== "maybe").length;
+    return `<div class="sec">
+      <h2>Rozhodnuto <small>${nVeci(decided)}</small></h2>
+      <div class="pilerow">${rows}</div>${year}
+      ${sell.length ? `<div class="summary"><span>${ic("tag")}Odhadovaný výtěžek z prodeje</span><b>${kcR(tot.lo, tot.hi)}</b></div>` : ""}
+      <p class="help">Ťukni na hromádku — uvidíš seznam, vrátíš věc do stacku nebo ji upravíš. Seznam „Prodat" a „Darovat" jde zkopírovat.</p>
+    </div>`;
   }
 
-  function boardMarkup(){
+  /* ---------- Rodina ---------- */
+  function familyScreen(){
     const ranked = [...players()].sort((a,b) => b.xp - a.xp);
-    const live = activeSprints();
     const all = pendingAll();
     const shared = all.filter(i => !i.owner_id).length;
-    return `<div class="sec"><h2>Rodinný žebříček</h2><div class="board">${
-      ranked.map((p,i) => {
-        const sp = live.find(s => s.player_id === p.id);
-        const wait = all.filter(x => x.owner_id === p.id).length;
-        const liveTag = sp ? `<span class="live">${ic("bolt")}${esc(sp.zone)} · <b data-live="${sp.id}">${fmtClock(secondsLeft(sp))}</b></span>` : "";
-        const waitTag = wait ? `<span class="wait">${nCekaji(wait)}</span>` : `<span class="wait wait--clear">čistý stůl</span>`;
-        const fl = streakAlive(p) && p.streak_count > 0 ? `<span class="fl">${ic("flame")}${p.streak_count}</span>` : "";
-        return `<div class="brow ${p.id===meId?"me":""}">
-          <span class="av" style="background:${avColor(p)}">${i<3 ? ["🥇","🥈","🥉"][i] : esc(initials(p.name))}</span>
-          <span class="nm">${esc(p.name)}${liveTag || waitTag}</span>
-          ${fl}
-          <span class="xpv">${p.xp} XP</span></div>`;
-      }).join("")
-    }</div>${shared ? `<div class="sharednote">Společné věci bez majitele: ${nCekaji(shared)}</div>` : ""}</div>`;
+    const board = ranked.map((p,i) => {
+      const wait = all.filter(x => x.owner_id === p.id).length;
+      const waitTag = wait ? `<span class="wait">${nCekaji(wait)}</span>` : `<span class="wait wait--clear">čistý stůl</span>`;
+      const fl = streakAlive(p) && p.streak_count > 0 ? `<span class="fl">${ic("flame")}${p.streak_count}</span>` : "";
+      return `<div class="brow ${p.id===meId?"me":""}">
+        <span class="av" style="background:${avColor(p)}">${i<3 ? ["🥇","🥈","🥉"][i] : esc(initials(p.name))}</span>
+        <span class="nm">${esc(p.name)}${waitTag}</span>${fl}
+        <span class="xpv">${p.xp} XP</span></div>`;
+    }).join("");
+    const remote = DB.mode === "remote";
+    return `<div class="sec">
+      <h2>Rodinný žebříček</h2>
+      <div class="board">${board}</div>
+      ${shared ? `<div class="sharednote">Společné věci bez majitele: ${nCekaji(shared)}</div>` : ""}
+      <div class="actions">
+        <button class="btn btn--ghost" data-act="players">${ic("users")}Hráči</button>
+        ${remote ? `<button class="btn btn--ghost" data-act="household">${ic("copy")}Kód domácnosti</button>` : ""}
+      </div>
+      ${remote ? `<p class="help">Domácnost <b>${esc(DB.household.name)}</b>. Kód pošli tomu, kdo se má přidat.</p>` : `<p class="help">Lokální režim — pro rodinu na víc telefonech vyplň <code>config.js</code>.</p>`}
+    </div>`;
   }
 
-  function renderScroll(){
-    const banner = DB.isExample()
-      ? `<div class="demobanner"><span>Hraješ na ukázkových datech.</span><button data-act="settings">Vymazat</button></div>`
-      : "";
-    $("#scroll").innerHTML = banner + stageMarkup() + pilesMarkup() + boardMarkup() + `<div style="height:12px"></div>`;
-    wireCard();
-  }
-
-  function renderDock(){
-    const dock = $("#dock");
-    const sp = mySprint();
-    if (sp){
-      dock.innerHTML = `<div class="sprintbar">
-        ${ic("bolt")}
-        <span class="clock">${fmtClock(secondsLeft(sp))}</span>
-        <span class="z">${esc(sp.zone)} · vyřešeno <b data-resolved>${sp.resolved}</b></span>
-        <button data-act="endsprint">Konec</button>
-      </div>`;
-    } else if (pending().length){
-      dock.innerHTML = `
-        <button class="btn btn--accent press" data-act="sprint">${ic("bolt")}Spustit sprint</button>
-        <button class="btn btn--ghost btn--round" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>`;
-    } else {
-      dock.innerHTML = `
-        <button class="btn btn--accent press" data-act="add">${ic("plus")}Přidat věc</button>
-        <button class="btn btn--ghost" data-act="sprint">${ic("bolt")}Sprint</button>`;
-    }
-  }
-
-  /* ---------- karta: drag & rozhodnutí ---------- */
+  /* ---------- karta: swipe jen vodorovně ---------- */
   function wireCard(){
     const card = $(".card--top");
     if (!card) return;
     const stamps = card.querySelectorAll(".stamp");
     let sx=0, sy=0, dx=0, dy=0, dragging=false, t0=0, onPhoto=false;
-    const dirOf = () => Math.abs(dx) > Math.abs(dy) ? (dx>0?"sell":"trash") : (dy>0?"donate":"keep");
     const clearStamps = () => stamps.forEach(s => s.style.opacity = 0);
-    card.addEventListener("pointerdown", e => { dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; t0 = Date.now(); onPhoto = !!e.target.closest(".card__photo img, .zoomhint"); card.setPointerCapture(e.pointerId); card.style.transition = "none"; });
+    card.addEventListener("pointerdown", e => {
+      if (e.target.closest(".card__edit")) return;               // tužka: žádný drag
+      dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; t0 = Date.now();
+      onPhoto = !!e.target.closest(".card__photo img");
+      card.setPointerCapture(e.pointerId); card.style.transition = "none";
+    });
     card.addEventListener("pointermove", e => {
       if (!dragging) return;
       dx = e.clientX - sx; dy = e.clientY - sy;
-      card.style.transform = `translate(${dx}px,${dy}px) rotate(${dx*0.05}deg)`;
-      const d = dirOf(), dist = Math.hypot(dx, dy);
+      // svisle = scroll (touch-action: pan-y ho pustí prohlížeči), karta reaguje jen na vodorovný pohyb
+      card.style.transform = `translateX(${dx}px) rotate(${dx*0.05}deg)`;
+      const d = dx > 0 ? "sell" : "trash", dist = Math.abs(dx);
       stamps.forEach(s => s.style.opacity = s.dataset.dir === d ? Math.min(1, (dist-20)/80) : 0);
     });
     const end = () => {
       if (!dragging) return;
       dragging = false;
-      const d = dirOf(), dist = Math.hypot(dx, dy);
-      if (dist > 92) flyOut(card, d, dx, dy);
+      if (Math.abs(dx) > 92) flyOut(card, dx > 0 ? "sell" : "trash", dx, 0);
       else {
         card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearStamps();
-        // krátké ťuknutí na fotku → celá obrazovka
         const img = card.querySelector(".card__photo img");
-        if (onPhoto && img && dist < 8 && Date.now() - t0 < 400) openViewer(img.src);
+        if (onPhoto && img && Math.hypot(dx, dy) < 8 && Date.now() - t0 < 400) openViewer(img.src);
       }
     };
     card.addEventListener("pointerup", end);
     card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearStamps(); });
     card.addEventListener("keydown", e => {
-      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe", ArrowUp:"keep", ArrowRight:"sell", ArrowDown:"donate", ArrowLeft:"trash"};
+      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe", ArrowRight:"sell", ArrowLeft:"trash"};
       if (map[e.key]){ e.preventDefault(); e.stopPropagation(); pressDecide(map[e.key]); }
     });
   }
@@ -361,7 +366,7 @@
     animating = true;
     if (RM){ decide(decision); return; }
     const ux = dx || (decision==="sell"?1:decision==="trash"?-1:0);
-    const uy = dy || (decision==="keep"?-1:decision==="donate"?1:0);
+    const uy = dy || (decision==="keep"?-1:(decision==="donate"||decision==="maybe")?1:0);
     const m = 760 / (Math.hypot(ux,uy) || 1);
     card.style.transition = "transform .34s ease-out, opacity .34s ease-out";
     card.style.transform = `translate(${ux*m}px,${uy*m}px) rotate(${(dx||ux*40)*0.08}deg)`;
@@ -382,72 +387,22 @@
   async function decide(decision){
     const it = pending()[0], p = me();
     if (!it || !p){ animating = false; return; }
-    const sp = mySprint();
-    const gain = 10 + (sp ? 5 : 0);
+    const gain = 10;
     const beforeLv = levelOf(p.xp).idx;
     localStorage.setItem("vs.seenHint", "1");
     try {
       await DB.decideItem(it.id, decision, p.id);
       const after = await DB.awardXp(p.id, gain);
       await DB.touchStreak(p.id);
-      if (sp) await DB.bumpSprint(sp.id, +1);
       animating = false;
       render();
       if (after && levelOf(after.xp).idx > beforeLv){ confetti(); toast(`Level up · ${levelOf(after.xp).name}!`); }
-      else toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", () => undo(it.id, p.id, gain, sp ? sp.id : null));
+      else toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", () => undo(it.id, p.id, gain));
     } catch(e){ animating = false; render(); toast("Nepovedlo se uložit: " + e.message); }
   }
-  async function undo(itemId, playerId, gain, sprintId){
-    try {
-      await DB.returnItem(itemId);
-      await DB.awardXp(playerId, -gain);
-      if (sprintId) await DB.bumpSprint(sprintId, -1);
-      render();
-    } catch(e){ toast("Zpět se nepovedlo: " + e.message); }
-  }
-
-  /* ---------- sprint ---------- */
-  function syncSprintTimer(){
-    const any = activeSprints().length > 0;
-    if (!any){ clearInterval(sprintTimer); sprintTimer = null; return; }
-    if (sprintTimer) return;
-    sprintTimer = setInterval(() => {
-      const mine = mySprint();
-      const clock = $("#dock .clock");
-      if (mine && clock) clock.textContent = fmtClock(secondsLeft(mine));
-      document.querySelectorAll("[data-live]").forEach(el => {
-        const s = DB.sprints().find(x => x.id === el.dataset.live);
-        if (s) el.textContent = fmtClock(secondsLeft(s));
-      });
-      // můj sprint vypršel → ukončit
-      const expired = DB.sprints().find(s => s.player_id === meId && !s.ended_at && new Date(s.ends_at).getTime() <= Date.now());
-      if (expired) finishSprint(expired);
-      // cizí sprint vypršel → jen překreslit
-      if (activeSprints().length === 0){ clearInterval(sprintTimer); sprintTimer = null; render(); }
-    }, 1000);
-  }
-  async function finishSprint(sp){
-    const p = me();
-    const alreadyEnding = sp._ending; if (alreadyEnding) return; sp._ending = true;
-    let bonus = 0;
-    try {
-      if (sp.resolved > 0){ bonus = 25; await DB.awardXp(p.id, bonus); }
-      const gained = sp.resolved * 15 + bonus;
-      await DB.endSprint(sp.id, gained);
-      render();
-      if (sp.resolved > 0) confetti();
-      openSheet(`
-        <div class="sheet__grip"></div>
-        <h3>${sp.resolved > 0 ? "Sprint hotový 💪" : "Sprint ukončen"}</h3>
-        <p class="sub">${esc(sp.zone)} · ${sp.minutes} min</p>
-        <div class="list">
-          <div class="li"><span class="li__ph">${ic("check")}</span><div class="li__t"><div class="li__n">Vyřešeno kusů</div><div class="li__s">během sprintu</div></div><b class="num">${sp.resolved}</b></div>
-          <div class="li"><span class="li__ph">${ic("bolt")}</span><div class="li__t"><div class="li__n">Získáno XP</div><div class="li__s">${bonus?("+"+bonus+" bonus za dokončení"):"bez bonusu"}</div></div><b class="num">+${gained}</b></div>
-          <div class="li"><span class="li__ph">${ic("flame")}</span><div class="li__t"><div class="li__n">Série</div><div class="li__s">dní v řadě</div></div><b class="num">${p && streakAlive(p) ? p.streak_count : 0}</b></div>
-        </div>
-        <div class="sheet__actions"><button class="btn btn--accent press" data-act="close">Paráda</button></div>
-      `);
-    } catch(e){ toast("Sprint se nepodařilo uložit: " + e.message); }
+  async function undo(itemId, playerId, gain){
+    try { await DB.returnItem(itemId); await DB.awardXp(playerId, -gain); render(); }
+    catch(e){ toast("Zpět se nepovedlo: " + e.message); }
   }
 
   /* ---------- sheets ---------- */
@@ -462,10 +417,8 @@
   function closeSheet(){ if (sheetLocked) return; modalRoot.innerHTML = ""; }
   function forceCloseSheet(){ sheetLocked = false; modalRoot.innerHTML = ""; }
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
-
   function busy(btn, on){ if (!btn) return; btn.disabled = on; btn.style.opacity = on ? ".6" : ""; }
 
-  // fotka na celou obrazovku (ťuknutí kamkoli zavře)
   function openViewer(url){
     document.querySelector(".viewer")?.remove();
     const v = document.createElement("div");
@@ -475,7 +428,6 @@
     document.body.appendChild(v);
   }
 
-  // --- onboarding domácnosti (jen remote) ---
   function sheetHouseholdOnboarding(){
     let mode = "create";
     const form = () => mode === "create"
@@ -502,21 +454,13 @@
     $("#hgo").addEventListener("click", async () => {
       const btn = $("#hgo"); busy(btn, true);
       try {
-        if (mode === "create"){
-          const n = ($("#hn").value || "").trim(); if (!n){ $("#hn").focus(); busy(btn, false); return; }
-          await DB.createHousehold(n);
-        } else {
-          const c = ($("#hc").value || "").trim(); if (c.length < 6){ $("#hc").focus(); busy(btn, false); return; }
-          await DB.joinHousehold(c);
-        }
-        forceCloseSheet();
-        ready = true;
-        sheetPickPlayer(true);
+        if (mode === "create"){ const n = ($("#hn").value || "").trim(); if (!n){ $("#hn").focus(); busy(btn, false); return; } await DB.createHousehold(n); }
+        else { const c = ($("#hc").value || "").trim(); if (c.length < 6){ $("#hc").focus(); busy(btn, false); return; } await DB.joinHousehold(c); }
+        forceCloseSheet(); ready = true; sheetPickPlayer(true);
       } catch(e){ busy(btn, false); toast(e.message); }
     });
   }
 
-  // --- kdo hraje na tomhle zařízení ---
   function sheetPickPlayer(required){
     const list = players();
     openSheet(`
@@ -570,7 +514,6 @@
       name: existing ? existing.name : "", cat: existing ? existing.cat : "obleceni-detske", cond: existing ? existing.cond : "dobre",
       owner: existing ? (existing.owner_id || null) : (lastOwner === "" ? null : (players().some(p => p.id === lastOwner) ? lastOwner : meId)),
       lo: base.lo, hi: base.hi, advice: base.advice, channel: base.channel,
-      // priceSet = cena pochází z AI nebo od člověka → uloží se; jinak zůstává živá heuristika
       priceSet: !!(existing && existing.price_lo != null), fromAi: !!(existing && existing.price_lo != null),
       photoBlob: null, photoDataUrl: null,
     };
@@ -618,7 +561,6 @@
     const setPriceInputs = () => { $("#plo").value = draft.lo; $("#phi").value = draft.hi; };
     const setCat = id => { draft.cat = id; $("#pc").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x.dataset.c === id)); };
     const setCond = id => { draft.cond = id; $("#pcond").querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", x.dataset.k === id)); };
-    // heuristika: buď celá (cena i rada), nebo jen rada k ručně zadané ceně
     const recompute = () => {
       if (draft.priceSet){ const e = estimate(draft.cat, draft.cond, (draft.lo + draft.hi) / 2); draft.advice = e.advice; draft.channel = e.channel; }
       else { const e = estimate(draft.cat, draft.cond); Object.assign(draft, { lo: e.lo, hi: e.hi, advice: e.advice, channel: e.channel }); setPriceInputs(); }
@@ -627,7 +569,6 @@
     refreshEst();
     $("#pn").addEventListener("input", e => draft.name = e.target.value);
     $("#pown").addEventListener("click", e => { const b = e.target.closest("[data-o]"); if (!b) return; draft.owner = b.dataset.o || null; $("#pown").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b)); });
-    // změna kategorie/stavu: AI/ruční cena zůstane, ale rada se přepočítá; heuristická cena se přepočítá celá
     $("#pc").addEventListener("click", e => { const b = e.target.closest("[data-c]"); if (!b) return; setCat(b.dataset.c); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
     $("#pcond").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; setCond(b.dataset.k); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
     const onPrice = () => {
@@ -650,7 +591,7 @@
       busy($("#padd"), true);
       try {
         const ai = await DB.analyzePhoto(r.blob);
-        if (!$("#pp")) return;                       // sheet mezitím zavřený
+        if (!$("#pp")) return;
         if (!draft.name.trim()){ draft.name = ai.name; $("#pn").value = ai.name; }
         if (CAT[ai.cat]) setCat(ai.cat);
         if (COND[ai.cond]) setCond(ai.cond);
@@ -658,12 +599,8 @@
         setPriceInputs(); refreshEst();
         const sure = ai.confidence >= 0.7 ? "" : ai.confidence >= 0.4 ? " · nejsem si úplně jistá" : " · tipuju, radši zkontroluj";
         $("#ainote").innerHTML = `<div class="ai-note">${ic("sparkle")}Rozpoznáno z fotky${sure}</div>`;
-      } catch(err){
-        toast("AI nepomohla: " + err.message);
-      } finally {
-        busy($("#padd"), false);
-        const veil = $("#pp .ai-veil"); if (veil) veil.remove();
-      }
+      } catch(err){ toast("AI nepomohla: " + err.message); }
+      finally { busy($("#padd"), false); $("#pp .ai-veil")?.remove(); }
     });
     const afterSave = (msg) => { forceCloseSheet(); render(); toast(msg); if (opts.fromPile) sheetPile(opts.fromPile); };
     $("#padd").addEventListener("click", async () => {
@@ -731,30 +668,6 @@
     });
   }
 
-  function sheetSprint(){
-    let zone = ZONES[0], mins = 15;
-    openSheet(`
-      <div class="sheet__grip"></div>
-      <h3>Vyklízecí sprint</h3>
-      <p class="sub">Nastav si čas na jednu zónu a projdi co nejvíc věcí. Během sprintu je +5 XP navíc za kus${DB.mode==="remote" ? " a ostatní v žebříčku vidí, že sprintuješ" : ""}.</p>
-      <div class="field"><label>Zóna</label>
-        <div class="chips" id="sz">${ZONES.map(z => `<button type="button" class="chip" data-z="${esc(z)}" aria-pressed="${z===zone}">${esc(z)}</button>`).join("")}</div></div>
-      <div class="field"><label>Délka</label>
-        <div class="segment" id="sm">${[10,15,25].map(m => `<button type="button" class="seg" data-m="${m}" aria-pressed="${m===mins}">${m} min</button>`).join("")}</div></div>
-      <div class="sheet__actions">
-        <button class="btn btn--ghost" data-act="close">Zrušit</button>
-        <button class="btn btn--accent press" id="sgo">${ic("bolt")}Start</button>
-      </div>
-    `);
-    $("#sz").addEventListener("click", e => { const b = e.target.closest("[data-z]"); if (!b) return; zone = b.dataset.z; $("#sz").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x===b)); });
-    $("#sm").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (!b) return; mins = +b.dataset.m; $("#sm").querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", x===b)); });
-    $("#sgo").addEventListener("click", async () => {
-      busy($("#sgo"), true);
-      try { await DB.startSprint({ playerId: meId, zone, minutes: mins }); forceCloseSheet(); render(); }
-      catch(err){ busy($("#sgo"), false); toast(err.message); }
-    });
-  }
-
   function sheetHousehold(){
     const h = DB.household;
     openSheet(`
@@ -762,9 +675,6 @@
       <h3>${esc(h.name)}</h3>
       <p class="sub">Tenhle kód pošli rodině — zadají ho při prvním spuštění a uvidí stejná data.</p>
       <div class="codebox"><span class="code">${esc(h.code)}</span><button class="btn btn--ghost" id="copycode">${ic("copy")}Zkopírovat</button></div>
-      <div class="list" style="margin-top:14px">
-        ${players().map(p => `<div class="li"><span class="li__ph" style="background:${avColor(p)};color:#fff;font-weight:800;border-radius:999px">${esc(initials(p.name))}</span><div class="li__t"><div class="li__n">${esc(p.name)}</div><div class="li__s">${p.xp} XP</div></div></div>`).join("")}
-      </div>
       <div class="sheet__actions" style="margin-top:14px">
         <button class="btn btn--ghost" id="leave">Odejít z domácnosti</button>
         <button class="btn btn--primary" data-act="close">Hotovo</button>
@@ -786,17 +696,25 @@
       <div class="settings-row"><span>Režim</span><span class="mode ${remote?"on":""}">${ic("wifi")}${remote ? "Rodinný · sync" : "Lokální"}</span></div>
       <div class="settings-row"><span>Verze appky</span><span class="num" style="font-size:12px;font-weight:700">${APP_VERSION}</span></div>
       <div class="settings-row"><span>Věcí v aplikaci</span><span class="num">${items().length}</span></div>
-      <div class="settings-row"><span>Dokončených sprintů</span><span class="num">${DB.sprintsDone()}</span></div>
-      ${remote ? "" : `<div class="settings-row"><span>Ukázková data</span><button ${DB.isExample()?"":"disabled"} id="wipedemo">Vymazat ukázky</button></div>`}
+      ${remote ? `
+      <div class="settings-row"><span>Domácnost</span><b>${esc(DB.household.name)}</b></div>
+      <div class="settings-row"><span>Kód pro rodinu</span><span style="display:flex;gap:8px;align-items:center"><b class="num" style="letter-spacing:.15em">${esc(DB.household.code)}</b><button id="copycode2">${ic("copy")} Kopírovat</button></span></div>
+      <div class="settings-row"><span>Tenhle telefon</span><button id="leave2">Odpojit od domácnosti</button></div>` : `
+      <div class="settings-row"><span>Ukázková data</span><button ${DB.isExample()?"":"disabled"} id="wipedemo">Vymazat ukázky</button></div>`}
       <div class="settings-row"><span>${remote ? "Vyprázdnit domácnost" : "Začít úplně znovu"}</span><button class="danger" id="wipeall">Smazat vše</button></div>
       <p class="sub" style="margin-top:14px">${remote
-        ? "Data leží ve vaší Supabase (tabulky items, players, sprints), fotky ve Storage. Nikdo jiný než členové domácnosti je nevidí."
+        ? "Data leží ve vaší Supabase (tabulky items, players), fotky ve Storage. Nikdo jiný než členové domácnosti je nevidí."
         : "Data zůstávají jen v tomhle prohlížeči. Pro rodinný režim se syncem vyplň <code>config.js</code> (viz README)."}</p>
       <div class="sheet__actions"><button class="btn btn--primary" data-act="close">Zavřít</button></div>
     `);
     $("#wipedemo")?.addEventListener("click", async () => { await DB.wipeExample(); setMe(null); forceCloseSheet(); render(); toast("Ukázky vymazány"); });
+    $("#copycode2")?.addEventListener("click", () => navigator.clipboard?.writeText(DB.household.code).then(() => toast("Kód zkopírován")).catch(() => {}));
+    $("#leave2")?.addEventListener("click", async () => {
+      if (!confirm("Odpojit tenhle telefon od domácnosti? Data zůstanou ostatním.")) return;
+      await DB.leaveHousehold(); setMe(null); forceCloseSheet(); ready = false; sheetHouseholdOnboarding();
+    });
     $("#wipeall").addEventListener("click", async () => {
-      if (!confirm(remote ? "Smazat všechny věci a sprinty v domácnosti a vynulovat XP všem?" : "Smazat úplně všechno?")) return;
+      if (!confirm(remote ? "Smazat všechny věci v domácnosti a vynulovat XP všem?" : "Smazat úplně všechno?")) return;
       await DB.wipeAll(); if (!remote) setMe(null); forceCloseSheet(); render(); toast("Začínáme načisto");
     });
   }
@@ -854,12 +772,14 @@
 
   /* ---------- globální události ---------- */
   document.addEventListener("click", async e => {
+    const tb = e.target.closest("[data-tab]");
+    if (tb){ setTab(tb.dataset.tab); render(); return; }
     const q = e.target.closest("[data-queue]");
     if (q){ setQueue(q.dataset.queue); render(); return; }
     const vw = e.target.closest("[data-view]");
     if (vw){ openViewer(vw.dataset.view); return; }
     const ed = e.target.closest("[data-edit]");
-    if (ed){ const it = items().find(x => x.id === ed.dataset.edit); if (it) sheetItemForm(it, { fromPile: curPileKey }); return; }
+    if (ed){ const it = items().find(x => x.id === ed.dataset.edit); if (it) sheetItemForm(it, { fromPile: ed.closest(".sheet") ? curPileKey : null }); return; }
     const ret = e.target.closest("[data-return]");
     if (ret){ try { await DB.returnItem(ret.dataset.return); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
     const mv = e.target.closest("[data-move]");
@@ -871,10 +791,7 @@
     const act = e.target.closest("[data-act]");
     if (!act) return;
     const a = act.dataset.act;
-    if (a === "add"){ curPileKey = null; sheetItemForm(null); }
-    else if (a === "edit"){ const it = pending()[0]; if (it){ curPileKey = null; sheetItemForm(it); } }
-    else if (a === "sprint") sheetSprint();
-    else if (a === "endsprint"){ const sp = mySprint(); if (sp) finishSprint(sp); }
+    if (a === "add") sheetItemForm(null);
     else if (a === "players") sheetPickPlayer(false);
     else if (a === "household") sheetHousehold();
     else if (a === "settings") sheetSettings();
@@ -884,7 +801,7 @@
   document.addEventListener("keydown", e => {
     if (modalRoot.innerHTML || document.activeElement?.classList.contains("input")) return;
     const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe"};
-    if (map[e.key] && pending().length){ e.preventDefault(); pressDecide(map[e.key]); }
+    if (map[e.key] && tab === "stack" && pending().length){ e.preventDefault(); pressDecide(map[e.key]); }
   });
 
   /* ---------- start ---------- */
@@ -898,26 +815,24 @@
         const first = await DB.seedExample(); localStorage.setItem("vs.local.touched", "1"); if (first) setMe(first);
       }
       meId = localStorage.getItem(playerKey());
-      if (queueMode === "mine" && myPending().length === 0) queueMode = "all";   // při startu bez vlastních věcí ukázat všechno
+      if (queueMode === "mine" && myPending().length === 0) queueMode = "all";
       ready = true;
       render();
     } catch(e){
       $("#scroll").innerHTML = `<div class="errorbox"><h3>Nejde se připojit</h3><p>${esc(e.message)}</p><p class="sub">Zkontroluj <code>config.js</code> a nastavení Supabase (schema.sql, Anonymous sign-ins).</p></div>`;
     }
   }
-  // označit, že lokální data už někdo měnil (aby se ukázky nevracely po smazání)
   const origWipe = DB.wipeAll.bind(DB); DB.wipeAll = async () => { localStorage.setItem("vs.local.touched", "1"); return origWipe(); };
 
   // PWA: service worker jen na https (ne při lokálním vývoji), zákaz pinch-zoomu na iOS
   if ("serviceWorker" in navigator && location.protocol === "https:"){
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register("./sw.js").then(reg => {
-      // při každém návratu do appky (iOS ji jen probudí, nenačte znovu) zkontrolovat novou verzi
       document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
       setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!hadController){ hadController = true; return; }      // první instalace, nic nepřenačítat
+      if (!hadController){ hadController = true; return; }
       if (modalRoot.innerHTML) toast("Je tu nová verze appky", "Obnovit", () => location.reload());
       else location.reload();
     });
