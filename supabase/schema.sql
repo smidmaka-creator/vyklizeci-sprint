@@ -47,6 +47,7 @@ create table if not exists items (
   price_hi      int,
   advice        text,
   channel       text check (channel in ('sell','donate','trash')),
+  owner_id      uuid references players(id) on delete set null,   -- čí to je; null = společné
   created_by    uuid references players(id) on delete set null,
   decided_by    uuid references players(id) on delete set null,
   created_at    timestamptz not null default now(),
@@ -54,6 +55,7 @@ create table if not exists items (
   position      bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
 create index if not exists items_stack_idx on items (household_id, decision, position desc);
+create index if not exists items_owner_idx on items (household_id, owner_id) where decision is null;
 
 create table if not exists sprints (
   id            uuid primary key default gen_random_uuid(),

@@ -4,7 +4,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.5.0 · 9. 9. 2026";
+  const APP_VERSION = "0.6.0 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -128,7 +128,16 @@
 
   const players = () => DB.players();
   const items = () => DB.items();
-  const pending = () => items().filter(i => !i.decision);
+  // fronta: "mine" = jen moje věci, "all" = všechny (moje napřed, pak společné, pak cizí)
+  let queueMode = localStorage.getItem("vs.queue") || "mine";
+  const rank = i => i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1);
+  const pendingAll = () => items().filter(i => !i.decision).sort((a, b) => rank(a) - rank(b));
+  const myPending = () => items().filter(i => !i.decision && i.owner_id === meId);
+  const pending = () => queueMode === "mine" ? myPending() : pendingAll();
+  const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+  const decidedTodayByMe = () => items().filter(i => i.decided_by === meId && i.decided_at && new Date(i.decided_at).getTime() >= startOfToday()).length;
+  const nCekaji = n => n + " " + plural(n, ["čeká", "čekají", "čeká"]);
+  function setQueue(mode){ queueMode = mode; localStorage.setItem("vs.queue", mode); }
   const countBy = d => items().filter(i => i.decision === d).length;
   const me = () => players().find(p => p.id === meId) || null;
   const initials = n => (String(n).trim()[0] || "?").toUpperCase();
@@ -182,8 +191,10 @@
       <div class="stamp" data-dir="sell">Prodat</div>
       <div class="stamp" data-dir="trash">Vyhodit</div>
       <div class="stamp" data-dir="donate">Darovat</div>` : "";
-    const by = players().find(p => p.id === it.created_by);
-    const byTag = by && by.id !== meId ? `<span class="tag">přidal/a ${esc(by.name)}</span>` : "";
+    const owner = players().find(p => p.id === it.owner_id);
+    const byTag = owner
+      ? `<span class="tag tag--owner" style="--oc:${avColor(owner)}"><i></i>${owner.id === meId ? "Moje" : esc(owner.name)}</span>`
+      : `<span class="tag">Společné</span>`;
     return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
       <div class="card__photo">${photo}
         <span class="price"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span>${kcR(e.lo, e.hi)}${e.ai ? ic("sparkle") : ""}</span>
@@ -202,9 +213,25 @@
   }
 
   function stageMarkup(){
-    const pend = pending();
+    const all = pendingAll(), mine = myPending(), pend = pending();
+    const filter = all.length ? `<div class="qfilter"><div class="segment">
+        <button type="button" class="seg" data-queue="mine" aria-pressed="${queueMode==="mine"}">Moje · ${mine.length}</button>
+        <button type="button" class="seg" data-queue="all" aria-pressed="${queueMode==="all"}">Všechny · ${all.length}</button>
+      </div></div>` : "";
+    const done = decidedTodayByMe();
+    let banner = "";
+    if (queueMode === "mine" && mine.length) banner = `<div class="mybanner">${ic("bolt")}Zbývá ti ${nVeci(mine.length)}${done ? ` · dnes vyřízeno ${done}` : ""}</div>`;
+    else if (queueMode === "all" && mine.length) banner = `<div class="mybanner mybanner--nudge"><span>${ic("bolt")}Máš ${nVeci(mine.length)} k vyřízení</span><button type="button" data-queue="mine">Ukázat moje</button></div>`;
     if (!pend.length){
-      return `<div class="emptystate">
+      if (queueMode === "mine" && all.length){
+        return filter + `<div class="emptystate">
+          <div class="big">${ic("check")}</div>
+          <h3>Čistý stůl!</h3>
+          <p>${done ? `Dnes vyřízeno ${done}. ` : ""}Tvoje věci mají jasno. Ostatním ještě zbývá ${nVeci(all.length)}.</p>
+          <button class="btn btn--ghost" data-queue="all" style="margin-top:14px">Pomoct ostatním</button>
+        </div>`;
+      }
+      return filter + `<div class="emptystate">
         <div class="big">${ic("check")}</div>
         <h3>Stack je prázdný!</h3>
         <p>Každá věc má jasno. Přidej další, nebo si dej vyklízecí sprint.</p>
@@ -214,7 +241,7 @@
     if (pend[1]) cards.push(cardMarkup(pend[1], false));
     cards.push(cardMarkup(pend[0], true));
     const hint = !seenHint() ? `<div class="hint">Táhni kartu do stran, nebo ťukni na volbu níž</div>` : "";
-    return `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
+    return filter + banner + `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
       <div class="decisions">
         <button class="dbtn press" style="--h:var(--keep);--edge:var(--keep-dark)"     data-decide="keep">${ic("home")}Nechat<small>${nVeci(countBy("keep"))}</small></button>
         <button class="dbtn press" style="--h:var(--sell);--edge:var(--sell-dark)"     data-decide="sell">${ic("tag")}Prodat<small>${nVeci(countBy("sell"))}</small></button>
@@ -247,18 +274,22 @@
   function boardMarkup(){
     const ranked = [...players()].sort((a,b) => b.xp - a.xp);
     const live = activeSprints();
+    const all = pendingAll();
+    const shared = all.filter(i => !i.owner_id).length;
     return `<div class="sec"><h2>Rodinný žebříček</h2><div class="board">${
       ranked.map((p,i) => {
         const sp = live.find(s => s.player_id === p.id);
+        const wait = all.filter(x => x.owner_id === p.id).length;
         const liveTag = sp ? `<span class="live">${ic("bolt")}${esc(sp.zone)} · <b data-live="${sp.id}">${fmtClock(secondsLeft(sp))}</b></span>` : "";
+        const waitTag = wait ? `<span class="wait">${nCekaji(wait)}</span>` : `<span class="wait wait--clear">čistý stůl</span>`;
         const fl = streakAlive(p) && p.streak_count > 0 ? `<span class="fl">${ic("flame")}${p.streak_count}</span>` : "";
         return `<div class="brow ${p.id===meId?"me":""}">
           <span class="av" style="background:${avColor(p)}">${i<3 ? ["🥇","🥈","🥉"][i] : esc(initials(p.name))}</span>
-          <span class="nm">${esc(p.name)}${liveTag}</span>
+          <span class="nm">${esc(p.name)}${liveTag || waitTag}</span>
           ${fl}
           <span class="xpv">${p.xp} XP</span></div>`;
       }).join("")
-    }</div></div>`;
+    }</div>${shared ? `<div class="sharednote">Společné věci bez majitele: ${nCekaji(shared)}</div>` : ""}</div>`;
   }
 
   function renderScroll(){
@@ -527,15 +558,17 @@
     $("#npn").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
     setTimeout(() => $("#npn")?.focus(), 50);
   }
-  function setMe(id){ meId = id; if (id) localStorage.setItem(playerKey(), id); else localStorage.removeItem(playerKey()); }
+  function setMe(id){ meId = id; if (id) localStorage.setItem(playerKey(), id); else localStorage.removeItem(playerKey()); if (id && myPending().length === 0) queueMode = "all"; }
 
   // Formulář věci: existing = null → přidat; jinak upravit. opts.fromPile = klíč hromádky, kam se po uložení vrátit.
   function sheetItemForm(existing, opts = {}){
     const isEdit = !!existing;
     const aiOn = DB.aiAvailable();
     const base = existing ? estimateFor(existing) : estimate("obleceni-detske", "dobre");
+    const lastOwner = localStorage.getItem("vs.lastOwner");
     const draft = {
       name: existing ? existing.name : "", cat: existing ? existing.cat : "obleceni-detske", cond: existing ? existing.cond : "dobre",
+      owner: existing ? (existing.owner_id || null) : (lastOwner === "" ? null : (players().some(p => p.id === lastOwner) ? lastOwner : meId)),
       lo: base.lo, hi: base.hi, advice: base.advice, channel: base.channel,
       // priceSet = cena pochází z AI nebo od člověka → uloží se; jinak zůstává živá heuristika
       priceSet: !!(existing && existing.price_lo != null), fromAi: !!(existing && existing.price_lo != null),
@@ -554,6 +587,11 @@
       </div>
       <div class="field"><label>Co to je</label>
         <input class="input" id="pn" placeholder="např. Dětská bunda vel. 104" autocomplete="off" value="${esc(draft.name)}"></div>
+      <div class="field"><label>Čí to je</label>
+        <div class="chips" id="pown">
+          ${players().map(p => `<button type="button" class="chip chip--owner" data-o="${p.id}" style="--oc:${avColor(p)}" aria-pressed="${draft.owner===p.id}"><span class="dot"></span>${p.id===meId ? "Moje" : esc(p.name)}</button>`).join("")}
+          <button type="button" class="chip" data-o="" aria-pressed="${draft.owner===null}">${ic("users")}Společné</button>
+        </div></div>
       <div class="field"><label>Kategorie</label>
         <div class="chips" id="pc">${CATS.map(c => `<button type="button" class="chip" data-c="${c.id}" aria-pressed="${c.id===draft.cat}">${ic(c.icon)}${esc(c.short)}</button>`).join("")}</div></div>
       <div class="field"><label>Stav</label>
@@ -588,6 +626,7 @@
     };
     refreshEst();
     $("#pn").addEventListener("input", e => draft.name = e.target.value);
+    $("#pown").addEventListener("click", e => { const b = e.target.closest("[data-o]"); if (!b) return; draft.owner = b.dataset.o || null; $("#pown").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b)); });
     // změna kategorie/stavu: AI/ruční cena zůstane, ale rada se přepočítá; heuristická cena se přepočítá celá
     $("#pc").addEventListener("click", e => { const b = e.target.closest("[data-c]"); if (!b) return; setCat(b.dataset.c); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
     $("#pcond").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; setCond(b.dataset.k); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
@@ -632,9 +671,10 @@
       if (!name){ $("#pn").focus(); $("#pn").style.borderColor = "var(--trash)"; return; }
       busy($("#padd"), true);
       const ai = draft.priceSet ? { price_lo: draft.lo, price_hi: draft.hi, advice: draft.advice, channel: draft.channel } : null;
+      localStorage.setItem("vs.lastOwner", draft.owner || "");
       try {
-        if (isEdit) await DB.updateItem(existing.id, { name, cat: draft.cat, cond: draft.cond, ai, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl });
-        else await DB.addItem({ name, cat: draft.cat, cond: draft.cond, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl, createdBy: meId, ai });
+        if (isEdit) await DB.updateItem(existing.id, { name, cat: draft.cat, cond: draft.cond, ai, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl, ownerId: draft.owner });
+        else await DB.addItem({ name, cat: draft.cat, cond: draft.cond, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl, createdBy: meId, ai, ownerId: draft.owner });
         afterSave(isEdit ? "Uloženo" : "Přidáno do stacku");
       } catch(err){ busy($("#padd"), false); toast(err.message === "quota" ? "Došlo místo v prohlížeči — zkus bez fotky." : err.message); }
     });
@@ -814,6 +854,8 @@
 
   /* ---------- globální události ---------- */
   document.addEventListener("click", async e => {
+    const q = e.target.closest("[data-queue]");
+    if (q){ setQueue(q.dataset.queue); render(); return; }
     const vw = e.target.closest("[data-view]");
     if (vw){ openViewer(vw.dataset.view); return; }
     const ed = e.target.closest("[data-edit]");
@@ -856,6 +898,7 @@
         const first = await DB.seedExample(); localStorage.setItem("vs.local.touched", "1"); if (first) setMe(first);
       }
       meId = localStorage.getItem(playerKey());
+      if (queueMode === "mine" && myPending().length === 0) queueMode = "all";   // při startu bez vlastních věcí ukázat všechno
       ready = true;
       render();
     } catch(e){

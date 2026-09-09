@@ -9,6 +9,7 @@ Vanilla JS bez buildu; data buď jen v prohlížeči (lokální režim), nebo sd
 - **Vyklízecí sprint** — časovka na jednu zónu (10 / 15 / 25 min), +5 XP za kus, ostatní vidí, že sprintuješ
 - **Gamifikace** — XP, úrovně, série dní v řadě, konfety
 - **Rodina** — jedna domácnost, každý na svém mobilu, společný stack i hromádky, živý žebříček
+- **Čí to je** — u věci se určí majitel (nebo „společné"); každý vidí napřed svoji frontu, v žebříčku je vidět, kdo kolik má k vyřízení (`supabase/migrations/003_owner.sql` pro starší DB)
 - **Chytrý odhad** — z kategorie a stavu se dopočítá orientační cena a doporučení prodat / darovat
 - **Fotky** — vyfotíš věc, zmenší se a uloží do Storage
 

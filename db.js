@@ -49,7 +49,7 @@
     async seedExample(){
       const p1 = uid(), p2 = uid(), p3 = uid();
       const mk = (name, cat, cond, decision, extra={}) => ({
-        id: uid(), name, cat, cond, photo_path: null, decision: decision || null, review_at: null,
+        id: uid(), name, cat, cond, photo_path: null, decision: decision || null, review_at: null, owner_id: null,
         created_by: p1, decided_by: decision ? p1 : null, created_at: new Date().toISOString(),
         decided_at: decision ? new Date().toISOString() : null, position: Date.now() - Math.random()*1000, example: true, ...extra,
       });
@@ -59,9 +59,10 @@
         { id: p3, name: "Péťa", xp: 45,  streak_count: 0, streak_last: null, color: 2, example: true },
       ];
       this.s.items = [
-        mk("Dětská softshellová bunda, vel. 104", "obleceni-detske", "dobre", null, { position: Date.now() + 3 }),
-        mk("Kávovar Krups Dolce Gusto", "elektronika", "dobre", null, { position: Date.now() + 2 }),
-        mk("LEGO Technic 42100 (nekompletní)", "hracka", "opotrebene", null, { position: Date.now() + 1 }),
+        mk("Dětská softshellová bunda, vel. 104", "obleceni-detske", "dobre", null, { position: Date.now() + 3, owner_id: p2 }),
+        mk("Kávovar Krups Dolce Gusto", "elektronika", "dobre", null, { position: Date.now() + 2, owner_id: p1 }),
+        mk("LEGO Technic 42100 (nekompletní)", "hracka", "opotrebene", null, { position: Date.now() + 1, owner_id: p3 }),
+        mk("Deskovka Osadníci z Katanu", "hracka", "dobre", null, { position: Date.now() + 0 }),
         mk("Dámské džíny Levi's 501, vel. 30", "obleceni-damske", "jako-nove", "sell"),
         mk("Plyšový medvěd", "hracka", "dobre", "donate"),
         mk("Sada 6 hrnků IKEA", "nadobi", "dobre", "donate"),
@@ -83,15 +84,15 @@
 
     // --- hráči ---
     async addPlayer(name){ const p = { id: uid(), name, xp: 0, streak_count: 0, streak_last: null, color: this.s.players.length }; this.s.players.push(p); this._save(); this._emit(); return p; }
-    async deletePlayer(id){ this.s.players = this.s.players.filter(p => p.id !== id); this._save(); this._emit(); }
+    async deletePlayer(id){ this.s.players = this.s.players.filter(p => p.id !== id); this.s.items.forEach(i => { if (i.owner_id === id) i.owner_id = null; }); this._save(); this._emit(); }
     async awardXp(id, delta){ const p = this.s.players.find(x => x.id === id); if (p){ p.xp = Math.max(0, p.xp + delta); this._save(); this._emit(); } return p; }
     async touchStreak(id){ const p = this.s.players.find(x => x.id === id); if (!p) return; const n = nextStreak(p); if (n){ Object.assign(p, n); this._save(); this._emit(); } }
 
     // --- věci ---
     aiAvailable(){ return false; }
     async analyzePhoto(){ return null; }
-    async addItem({ name, cat, cond, photoBlob, photoDataUrl, createdBy, ai }){
-      const it = { id: uid(), name, cat, cond, photo_path: photoDataUrl || null, decision: null, review_at: null,
+    async addItem({ name, cat, cond, photoBlob, photoDataUrl, createdBy, ai, ownerId }){
+      const it = { id: uid(), name, cat, cond, photo_path: photoDataUrl || null, decision: null, review_at: null, owner_id: ownerId || null,
         price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null,
         created_by: createdBy || null, decided_by: null, created_at: new Date().toISOString(), decided_at: null, position: Date.now() };
       this.s.items.unshift(it); this._save(); this._emit();
@@ -106,9 +107,9 @@
     }
     async returnItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = null; it.decided_by = null; it.decided_at = null; it.position = Date.now(); this._save(); this._emit(); } }
     async skipItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.position = Math.min(...this.s.items.filter(i => !i.decision).map(i => i.position)) - 1; this._save(); this._emit(); } }
-    async updateItem(id, { name, cat, cond, ai, photoDataUrl }){
+    async updateItem(id, { name, cat, cond, ai, photoDataUrl, ownerId }){
       const it = this.s.items.find(x => x.id === id); if (!it) return;
-      Object.assign(it, { name, cat, cond, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null });
+      Object.assign(it, { name, cat, cond, owner_id: ownerId || null, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null });
       if (photoDataUrl) it.photo_path = photoDataUrl;
       this._save(); this._emit();
     }
@@ -265,7 +266,7 @@
     }
 
     // --- věci ---
-    async addItem({ name, cat, cond, photoBlob, createdBy, ai }){
+    async addItem({ name, cat, cond, photoBlob, createdBy, ai, ownerId }){
       let photo_path = null;
       if (photoBlob){
         photo_path = this.household.id + "/" + uid() + ".jpg";
@@ -273,7 +274,7 @@
         if (error) throw new Error("Fotku se nepodařilo nahrát: " + error.message);
       }
       const { data, error } = await this.sb.from("items").insert({
-        household_id: this.household.id, name, cat, cond, photo_path, created_by: createdBy || null, position: Date.now(),
+        household_id: this.household.id, name, cat, cond, photo_path, created_by: createdBy || null, owner_id: ownerId || null, position: Date.now(),
         price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null,
       }).select().single();
       if (error) throw new Error(error.message);
@@ -287,8 +288,8 @@
       await this._after("items");
     }
     async returnItem(id){ await this.sb.from("items").update({ decision: null, decided_by: null, decided_at: null, position: Date.now() }).eq("id", id); await this._after("items"); }
-    async updateItem(id, { name, cat, cond, ai, photoBlob }){
-      const row = { name, cat, cond, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null };
+    async updateItem(id, { name, cat, cond, ai, photoBlob, ownerId }){
+      const row = { name, cat, cond, owner_id: ownerId || null, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null };
       const old = this.cache.items.find(x => x.id === id);
       if (photoBlob){
         row.photo_path = this.household.id + "/" + uid() + ".jpg";
