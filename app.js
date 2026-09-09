@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.2 · 9. 9. 2026";
+  const APP_VERSION = "0.8.3 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -135,7 +135,10 @@
   // při startu vždy Moje, pokud tam něco je; přepnutí platí do dalšího spuštění
   let queueMode = "mine";
   let pinId = null;                                    // věc vrácená z krabice na rok → dočasně nahoře
-  const rank = i => i.id === pinId ? -1 : (i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1));
+  let skipped = [];                                    // přeskočené věci jdou na úplný konec fronty (v pořadí přeskočení)
+  const rank = i => i.id === pinId ? -1
+    : skipped.includes(i.id) ? 10 + skipped.indexOf(i.id)
+    : (i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1));
   const pendingAll = () => items().filter(i => !i.decision).sort((a, b) => rank(a) - rank(b));
   const myPending = () => items().filter(i => !i.decision && i.owner_id === meId);
   const pending = () => queueMode === "mine" ? myPending().sort((a, b) => rank(a) - rank(b)) : pendingAll();
@@ -826,7 +829,14 @@
     else if (a === "household") sheetHousehold();
     else if (a === "settings") sheetSettings();
     else if (a === "close") closeSheet();
-    else if (a === "skip"){ const it = pending()[0]; if (it && pending().length > 1){ try { await DB.skipItem(it.id); render(); } catch(err){ toast(err.message); } } }
+    else if (a === "skip"){
+      const list = pending(), it = list[0];
+      if (it && list.length > 1){
+        if (!skipped.includes(it.id)) skipped.push(it.id);
+        if (list.every(x => skipped.includes(x.id))) skipped = [];   // všechny přeskočené → kolo odznovu
+        render();
+      }
+    }
   });
   document.addEventListener("keydown", e => {
     if (modalRoot.innerHTML || document.activeElement?.classList.contains("input")) return;
