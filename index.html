@@ -1,0 +1,1003 @@
+<title>Vyklízecí sprint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap">
+<style>
+  :root{
+    --wrap:#EBE8E0;
+    --ground:#FBFAF7;
+    --surface:#FFFFFF;
+    --surface-2:#F1EEE6;
+    --ink:#1C1E1B;
+    --ink-soft:#575A52;
+    --ink-faint:#8B8E83;
+    --line:#E5E2D9;
+    --keep:#2F6DA8;
+    --sell:#2C7C4C;
+    --donate:#C27C1E;
+    --trash:#BD4536;
+    --accent:#6B4EE6;
+    --gold:#C79A3C; --silver:#95999E; --bronze:#A9723F;
+    --shadow:0 1px 2px rgba(20,22,19,.05),0 10px 30px rgba(20,22,19,.10);
+    --font-display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
+    --font-body:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --wrap:#0D0E0C; --ground:#151613; --surface:#1E201C; --surface-2:#2A2C25;
+      --ink:#ECEAE2; --ink-soft:#ACAFA4; --ink-faint:#767A6E; --line:#33362E;
+      --keep:#66A8DF; --sell:#57BE86; --donate:#E1A751; --trash:#E37162; --accent:#A791FF;
+      --gold:#E0B457; --silver:#B9BDC2; --bronze:#C68A56;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --wrap:#0D0E0C; --ground:#151613; --surface:#1E201C; --surface-2:#2A2C25;
+    --ink:#ECEAE2; --ink-soft:#ACAFA4; --ink-faint:#767A6E; --line:#33362E;
+    --keep:#66A8DF; --sell:#57BE86; --donate:#E1A751; --trash:#E37162; --accent:#A791FF;
+    --gold:#E0B457; --silver:#B9BDC2; --bronze:#C68A56;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--wrap);color:var(--ink);font-family:var(--font-body);
+    font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  button{font-family:inherit;color:inherit}
+  .ic{width:1em;height:1em;flex:0 0 auto;display:inline-block;vertical-align:-.12em}
+
+  .shell{display:flex;flex-direction:column;height:100dvh;max-width:480px;margin:0 auto;
+    background:var(--ground);position:relative;overflow:hidden}
+  @media (min-width:560px){
+    body{padding:22px 16px}
+    .shell{height:calc(100dvh - 44px);border-radius:26px;border:1px solid var(--line);box-shadow:var(--shadow)}
+  }
+
+  /* ---- topbar ---- */
+  .topbar{flex:0 0 auto;padding:12px 14px 10px;background:var(--ground);border-bottom:1px solid var(--line);z-index:5}
+  .topbar__row{display:flex;align-items:center;gap:8px}
+  .wordmark{font-family:var(--font-display);font-weight:800;font-size:15px;letter-spacing:-.02em;
+    display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+  .wordmark .flame{color:var(--accent);font-size:15px}
+  .iconbtn{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;border:1px solid transparent;
+    background:transparent;color:var(--ink-soft);cursor:pointer;font-size:17px}
+  .iconbtn:hover{background:var(--surface-2)}
+  .iconbtn.solid{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+  .statrow{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .pchip{display:inline-flex;align-items:center;gap:6px;padding:5px 9px 5px 6px;border-radius:999px;
+    background:var(--surface-2);border:1px solid var(--line);font-weight:600;font-size:12.5px;cursor:pointer;color:var(--ink)}
+  .pchip .av{width:19px;height:19px;border-radius:999px;display:grid;place-items:center;background:var(--accent);
+    color:#fff;font-size:10.5px;font-weight:700}
+  .pchip .car{color:var(--ink-faint);font-size:10px}
+  .streak{display:inline-flex;align-items:center;gap:3px;color:var(--accent);font-weight:700;font-size:13px}
+  .streak.dead{color:var(--ink-faint)}
+  .streak b{font-family:var(--font-mono);font-size:13px}
+  .xp{flex:1;min-width:0}
+  .xp__meta{display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-faint);margin-bottom:3px;
+    letter-spacing:.02em}
+  .xp__bar{height:7px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+  .xp__fill{height:100%;border-radius:999px;background:var(--accent);transition:width .45s cubic-bezier(.2,.8,.2,1)}
+
+  .scroll{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+  .dock{flex:0 0 auto;padding:10px 14px 14px;display:flex;gap:8px;
+    background:linear-gradient(to top,var(--ground) 62%,transparent);border-top:1px solid var(--line)}
+
+  .demobanner{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 14px 0;
+    padding:8px 11px;border-radius:11px;font-size:12px;color:var(--ink-soft);
+    background:color-mix(in srgb,var(--accent) 9%,var(--surface));
+    border:1px solid color-mix(in srgb,var(--accent) 20%,transparent)}
+  .demobanner button{background:none;border:0;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;padding:0;white-space:nowrap}
+
+  /* ---- card stage ---- */
+  .stage{position:relative;display:grid;place-items:center;padding:14px 16px 4px;min-height:352px}
+  .cardstack{position:relative;width:min(344px,80vw);height:338px}
+  .card{position:absolute;inset:0;background:var(--surface);border:1px solid var(--line);border-radius:22px;
+    box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
+  .card--top{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;will-change:transform}
+  .card--top:active{cursor:grabbing}
+  .card--behind{transform:scale(.945) translateY(16px);pointer-events:none;filter:saturate(.9) brightness(.99);opacity:.9}
+  .card__photo{flex:1;position:relative;display:grid;place-items:center;color:var(--ink-faint);
+    background:
+      radial-gradient(circle at 1px 1px,color-mix(in srgb,var(--ink) 8%,transparent) 1px,transparent 0) 0 0/13px 13px,
+      linear-gradient(140deg,var(--surface-2),color-mix(in srgb,var(--accent) 9%,var(--surface-2)))}
+  .card__photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .bigic{font-size:76px;line-height:1;opacity:.55}
+  .bigic .ic{stroke-width:1.2}
+  .card__body{padding:13px 15px 15px;display:flex;flex-direction:column;gap:7px;background:var(--surface);
+    border-top:1px solid var(--line)}
+  .card__name{font-family:var(--font-display);font-weight:700;font-size:18px;line-height:1.16;text-wrap:balance}
+  .tags{display:flex;flex-wrap:wrap;gap:5px}
+  .tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:var(--surface-2);
+    color:var(--ink-soft);font-weight:600;font-size:11px;letter-spacing:.01em}
+  .estimate{font-size:12px;color:var(--ink-soft);line-height:1.35}
+  .estimate strong{color:var(--ink);font-weight:700}
+  .estimate .dot{display:inline-block;width:7px;height:7px;border-radius:999px;margin-right:5px;vertical-align:.04em}
+
+  .stamp{position:absolute;top:16px;padding:5px 11px;border:3px solid;border-radius:9px;font-family:var(--font-display);
+    font-weight:800;font-size:19px;text-transform:uppercase;letter-spacing:.04em;opacity:0;pointer-events:none;transition:opacity .1s}
+  .stamp[data-dir="keep"]{left:16px;transform:rotate(-11deg);color:var(--keep);border-color:var(--keep)}
+  .stamp[data-dir="sell"]{right:16px;transform:rotate(11deg);color:var(--sell);border-color:var(--sell)}
+  .stamp[data-dir="trash"]{left:16px;top:96px;transform:rotate(-9deg);color:var(--trash);border-color:var(--trash)}
+  .stamp[data-dir="donate"]{right:16px;top:96px;transform:rotate(9deg);color:var(--donate);border-color:var(--donate)}
+
+  .hint{position:absolute;left:0;right:0;bottom:-22px;text-align:center;font-size:11px;color:var(--ink-faint);padding:0 8px}
+
+  /* ---- decisions ---- */
+  .decisions{width:min(344px,80vw);margin:26px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .dbtn{--h:var(--keep);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    padding:11px 8px;min-height:60px;border-radius:14px;cursor:pointer;font-weight:700;font-size:13.5px;
+    background:color-mix(in srgb,var(--h) 12%,var(--surface));color:var(--h);
+    border:1.5px solid color-mix(in srgb,var(--h) 30%,transparent);transition:transform .08s}
+  .dbtn:active{transform:scale(.96)}
+  .dbtn .ic{font-size:17px;stroke-width:2}
+  .dbtn small{font-weight:600;font-size:10px;color:var(--ink-faint);letter-spacing:.02em}
+  .subrow{display:flex;gap:7px;justify-content:center;margin-top:9px;flex-wrap:wrap}
+  .linkbtn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:999px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:12px;font-weight:600;cursor:pointer}
+  .linkbtn .ic{font-size:13px}
+
+  /* ---- piles / board ---- */
+  .sec{padding:16px 14px 0}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-faint);margin:0 0 8px;font-weight:700}
+  .pilerow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .pile{--h:var(--keep);display:flex;flex-direction:column;gap:1px;align-items:flex-start;padding:8px 8px 9px;
+    border-radius:11px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--h);cursor:pointer;text-align:left}
+  .pile b{font-family:var(--font-mono);font-size:16px;font-weight:700}
+  .pile span{font-size:10px;color:var(--ink-faint);letter-spacing:.01em}
+  .yearbox{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;padding:11px 12px;
+    border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,var(--surface));
+    border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);cursor:pointer}
+  .yearbox.warn{background:color-mix(in srgb,var(--donate) 12%,var(--surface));border-color:color-mix(in srgb,var(--donate) 28%,transparent)}
+  .yearbox .t{font-size:12.5px;font-weight:600}
+  .yearbox .s{font-size:11px;color:var(--ink-soft)}
+  .yearbox .go{color:var(--ink-faint);font-size:15px}
+
+  .board{display:flex;flex-direction:column;gap:5px}
+  .brow{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+  .brow .rk{width:16px;text-align:center;font-family:var(--font-mono);font-size:12px;color:var(--ink-faint)}
+  .brow .medal{width:8px;height:8px;border-radius:999px}
+  .brow .nm{flex:1;font-weight:600;font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brow.me .nm{color:var(--accent)}
+  .brow .xpv{font-family:var(--font-mono);font-size:12px;color:var(--ink-soft)}
+
+  .emptystate{text-align:center;padding:40px 24px 12px;color:var(--ink-soft)}
+  .emptystate .big{font-size:44px;color:var(--sell);line-height:1}
+  .emptystate h3{font-family:var(--font-display);font-weight:700;font-size:19px;margin:12px 0 4px;color:var(--ink)}
+  .emptystate p{font-size:13px;margin:0}
+
+  .btn{border:0;border-radius:14px;padding:13px 14px;font-family:var(--font-display);font-weight:700;font-size:15px;
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+  .btn--primary{background:var(--ink);color:var(--ground);flex:1}
+  .btn--ghost{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+  .btn--accent{background:var(--accent);color:#fff;flex:1}
+  .btn .ic{font-size:16px;stroke-width:2}
+
+  .sprintbar{flex:1;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--accent);color:#fff}
+  .sprintbar .clock{font-family:var(--font-mono);font-weight:700;font-size:19px;letter-spacing:.01em}
+  .sprintbar .z{flex:1;min-width:0;font-size:11.5px;opacity:.9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sprintbar .rc{font-size:12px;font-weight:700;background:rgba(255,255,255,.2);padding:3px 8px;border-radius:999px}
+  .sprintbar button{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4);color:#fff;
+    border-radius:10px;padding:7px 10px;font-weight:700;font-size:12px;cursor:pointer}
+
+  /* ---- sheets ---- */
+  .overlay{position:fixed;inset:0;background:rgba(15,16,14,.46);display:flex;align-items:flex-end;justify-content:center;
+    z-index:40;padding:0;animation:fade .18s ease}
+  @media (min-width:560px){.overlay{align-items:center;padding:20px}}
+  @keyframes fade{from{opacity:0}}
+  .sheet{width:min(468px,100%);max-height:88dvh;overflow-y:auto;background:var(--surface);
+    border-radius:22px 22px 0 0;padding:16px 16px 22px;animation:rise .24s cubic-bezier(.2,.8,.2,1)}
+  @media (min-width:560px){.sheet{border-radius:20px}}
+  @keyframes rise{from{transform:translateY(24px);opacity:.6}}
+  .sheet__grip{width:34px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 12px}
+  .sheet h3{font-family:var(--font-display);font-weight:800;font-size:19px;margin:0 0 3px}
+  .sheet .sub{color:var(--ink-soft);font-size:12.5px;margin:0 0 14px}
+  .field{margin-bottom:12px}
+  .field>label{display:block;font-size:11.5px;font-weight:700;color:var(--ink-soft);margin-bottom:6px;
+    text-transform:uppercase;letter-spacing:.05em}
+  .input{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:10px;background:var(--ground);
+    color:var(--ink);font-size:15px;font-family:var(--font-body)}
+  .input:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{padding:7px 11px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+    font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+  .chip[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+  .chip .ic{font-size:13px}
+  .segment{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg{padding:9px 6px;border:0;background:var(--surface);color:var(--ink-soft);font-size:12.5px;font-weight:600;cursor:pointer}
+  .seg[aria-pressed="true"]{background:color-mix(in srgb,var(--accent) 15%,var(--surface));color:var(--accent)}
+  .seg+.seg{border-left:1px solid var(--line)}
+  .photopick{height:140px;border:1.5px dashed var(--line);border-radius:12px;display:grid;place-items:center;
+    color:var(--ink-faint);cursor:pointer;overflow:hidden;position:relative;text-align:center;font-size:12.5px;gap:4px}
+  .photopick img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .photopick .ic{font-size:22px}
+  .sheet__actions{display:flex;gap:8px;margin-top:6px}
+  .sheet__actions .btn{flex:1;font-size:14px;padding:12px}
+
+  .list{display:flex;flex-direction:column;gap:7px;margin-bottom:4px}
+  .li{display:flex;align-items:center;gap:10px;padding:9px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+  .li__ph{width:40px;height:40px;border-radius:9px;background:var(--surface-2);display:grid;place-items:center;
+    flex:0 0 auto;color:var(--ink-faint);font-size:18px;overflow:hidden}
+  .li__ph img{width:100%;height:100%;object-fit:cover}
+  .li__t{flex:1;min-width:0}
+  .li__n{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .li__s{font-size:11px;color:var(--ink-faint)}
+  .li__b{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:11.5px;
+    font-weight:600;cursor:pointer;color:var(--ink-soft);white-space:nowrap}
+  .total{display:flex;justify-content:space-between;font-weight:700;font-size:13.5px;padding:10px 2px 2px;
+    border-top:1px solid var(--line);margin-top:6px}
+  .empty-note{color:var(--ink-faint);font-size:12.5px;text-align:center;padding:14px 0}
+  .settings-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .settings-row:last-child{border-bottom:0}
+  .settings-row button{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;
+    font-size:12px;font-weight:600;cursor:pointer;color:var(--ink)}
+  .settings-row button.danger{color:var(--trash);border-color:color-mix(in srgb,var(--trash) 30%,transparent)}
+
+  .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;
+    background:var(--ink);color:var(--ground);padding:9px 14px;border-radius:999px;font-size:12.5px;font-weight:600;
+    box-shadow:var(--shadow);max-width:92vw;animation:rise .2s ease}
+  .toast button{background:none;border:0;color:var(--ground);font-weight:700;text-decoration:underline;cursor:pointer;font-size:12.5px}
+  .confetti{position:fixed;inset:0;pointer-events:none;z-index:70}
+
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+
+<div class="shell">
+  <div class="topbar" id="topbar"></div>
+  <div class="scroll" id="scroll"></div>
+  <div class="dock" id="dock"></div>
+</div>
+<div id="modal-root"></div>
+
+<script>
+(() => {
+  "use strict";
+  const KEY = "vyklizeci-sprint-v1";
+  const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const DAY = 86400000;
+  const $ = (s, r=document) => r.querySelector(s);
+  const uid = () => Math.random().toString(36).slice(2, 10);
+  const midnight = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+  const kc = n => Math.round(n).toLocaleString("cs-CZ") + " Kč";
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const plural = (n, a) => a[n === 1 ? 0 : (n >= 2 && n <= 4 ? 1 : 2)];
+  const nVeci = n => n + " " + plural(n, ["věc", "věci", "věcí"]);
+
+  /* ---------- icons ---------- */
+  const P = {
+    shirt:'<path d="M8 3l1.6 2A3 3 0 0 0 15 5L16.5 3 21 6l-2.5 4L16 8.6V21H8V8.6L5.5 10 3 6z"/>',
+    toy:'<rect x="3.5" y="3.5" width="7" height="7" rx="1"/><rect x="13.5" y="3.5" width="7" height="7" rx="1"/><rect x="8.5" y="13.5" width="7" height="7" rx="1"/>',
+    plug:'<path d="M9 3v4M15 3v4M6 7h12v3a6 6 0 0 1-12 0zM12 16v5"/>',
+    book:'<path d="M6 3h10a1 1 0 0 1 1 1v15H8a2 2 0 0 0-2 2V4a1 1 0 0 1 1-1zM6 19a2 2 0 0 0 2 2h9"/>',
+    cup:'<path d="M4 8h13v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM17 9h1.5a2.5 2.5 0 0 1 0 5H17M7 3v2M11 3v2"/>',
+    vase:'<path d="M8 3h8l-1.2 3.8A6 6 0 0 1 18 12c0 4.5-3 9-6 9s-6-4.5-6-9a6 6 0 0 1 3.2-5.2z"/>',
+    chair:'<path d="M7 3v8M17 3v8M5 11h14M6 11l1.2 6M18 11l-1.2 6M8.5 21l.8-4M15.5 21l-.8-4"/>',
+    ball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.5 3 3.5 15 0 18M12 3c-3.5 3-3.5 15 0 18"/>',
+    box:'<path d="M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8"/>',
+    home:'<path d="M4 11l8-7 8 7M6 10v10h12V10"/>',
+    tag:'<path d="M4 4h7l9 9-7 7-9-9zM8 8h.01"/>',
+    gift:'<path d="M4 9h16v11H4zM4 9l2-5c1.6-.6 3.4 0 4 1.6L12 9M20 9l-2-5c-1.6-.6-3.4 0-4 1.6L12 9M12 9v11"/>',
+    bin:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
+    gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M4.5 4.5l1.4 1.4M18.1 18.1l1.4 1.4M3 12h2M19 12h2M4.5 19.5l1.4-1.4M18.1 5.9l1.4-1.4"/>',
+    flame:'<path d="M12 3c1 3-2 4-2 7a3 3 0 0 0 6 .3C16 6 12 6 12 3zM8.5 11c-.6 1-1 2.2-1 3.5a4.5 4.5 0 0 0 9 0c0-1-.2-1.8-.5-2.5"/>',
+    check:'<path d="M4 12l5 5L20 6"/>',
+    bolt:'<path d="M13 3L4 14h7l-1 7 9-11h-7z"/>',
+    photo:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-4-9 7"/>',
+    undo:'<path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-3"/>',
+    skip:'<path d="M5 5l9 7-9 7zM19 5v14"/>',
+  };
+  const ic = (n, cls="") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||""}</svg>`;
+
+  /* ---------- domain ---------- */
+  const CATS = [
+    {id:"obleceni-damske", label:"Oblečení – dámské", short:"Dámské obl.", icon:"shirt", base:190},
+    {id:"obleceni-panske", label:"Oblečení – pánské", short:"Pánské obl.", icon:"shirt", base:160},
+    {id:"obleceni-detske", label:"Oblečení – dětské", short:"Dětské obl.", icon:"shirt", base:80},
+    {id:"hracka",          label:"Hračka",            short:"Hračka",     icon:"toy",   base:150},
+    {id:"elektronika",     label:"Elektronika",       short:"Elektro",    icon:"plug",  base:520},
+    {id:"kniha",           label:"Kniha",             short:"Kniha",      icon:"book",  base:55},
+    {id:"nadobi",          label:"Nádobí",            short:"Nádobí",     icon:"cup",   base:110},
+    {id:"dekorace",        label:"Dekorace",          short:"Dekorace",   icon:"vase",  base:95},
+    {id:"nabytek",         label:"Nábytek",           short:"Nábytek",    icon:"chair", base:750},
+    {id:"sport",           label:"Sport & hobby",     short:"Sport",      icon:"ball",  base:300},
+    {id:"jine",            label:"Jiné",              short:"Jiné",       icon:"box",   base:120},
+  ];
+  const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+  const CONDS = [
+    {id:"jako-nove",  label:"Jako nové",  mult:1.3},
+    {id:"dobre",      label:"Dobrý stav", mult:1.0},
+    {id:"opotrebene", label:"Opotřebené", mult:0.5},
+  ];
+  const COND = Object.fromEntries(CONDS.map(c => [c.id, c]));
+  const DEC = {
+    keep:   {label:"Nechat",  verb:"Zůstává doma",             icon:"home",  cvar:"--keep"},
+    sell:   {label:"Prodat",  verb:"Putuje na prodej",          icon:"tag",   cvar:"--sell"},
+    donate: {label:"Darovat", verb:"Jde darovat",               icon:"gift",  cvar:"--donate"},
+    trash:  {label:"Vyhodit", verb:"Míří do tříděného odpadu",   icon:"bin",   cvar:"--trash"},
+    maybe:  {label:"Krabice na rok", verb:"Uloženo do krabice na rok", icon:"clock", cvar:"--accent"},
+  };
+  const LEVELS = [
+    {min:0,name:"Nováček"},{min:150,name:"Vyklízeč"},{min:400,name:"Uklizeno"},
+    {min:850,name:"Minimalista"},{min:1500,name:"Mistr prostoru"},
+  ];
+  const ZONES = ["Skříň","Dětský pokoj","Kuchyň","Koupelna","Chodba","Sklep / komora","Celý byt"];
+
+  function estimate(catId, condId){
+    const c = CAT[catId] || CAT.jine;
+    const k = (COND[condId] || COND.dobre).mult;
+    const mid = Math.round(c.base * k);
+    const lo = Math.max(0, Math.round(mid * 0.6 / 10) * 10);
+    const hi = Math.round(mid * 1.45 / 10) * 10;
+    let advice, channel;
+    const softCats = ["kniha","obleceni-detske","nadobi","dekorace","obleceni-panske","obleceni-damske","hracka"];
+    if (condId === "opotrebene" && catId === "elektronika") { advice = "Ověř, že funguje. Nefunkční → sběrný dvůr."; channel = "trash"; }
+    else if (condId === "opotrebene" && softCats.includes(catId)) { advice = "Na prodej se čas nevyplatí — darovat."; channel = "donate"; }
+    else if (mid < 110) { advice = "Výtěžek nepokryje focení a balení — darovat."; channel = "donate"; }
+    else if (mid <= 400) { advice = "Vyplatí se na Vinted nebo Bazoš."; channel = "sell"; }
+    else { advice = "Vyšší hodnota — zkus Bazoš / Marketplace."; channel = "sell"; }
+    return {lo, hi, mid, advice, channel};
+  }
+
+  /* ---------- state ---------- */
+  function seed(){
+    const p1 = uid(), p2 = uid(), p3 = uid();
+    const mk = (name, cat, cond, decision, extra={}) => ({
+      id: uid(), name, cat, cond, photo: null, note: "",
+      decision: decision || null, createdAt: Date.now(),
+      decidedAt: decision ? Date.now() : null, decidedBy: decision ? p1 : null,
+      example: true, ...extra,
+    });
+    return {
+      v: 1, example: true,
+      players: [
+        {id:p1, name:"Ty",   xp:120, example:true},
+        {id:p2, name:"Míša", xp:90,  example:true},
+        {id:p3, name:"Péťa", xp:45,  example:true},
+      ],
+      currentPlayer: p1,
+      streak: {count: 2, last: midnight() - DAY},
+      seenHint: false,
+      sprint: null,
+      sprintsDone: 3,
+      items: [
+        mk("Dětská softshellová bunda, vel. 104", "obleceni-detske", "dobre", null),
+        mk("Kávovar Krups Dolce Gusto", "elektronika", "dobre", null),
+        mk("LEGO Technic 42100 (nekompletní)", "hracka", "opotrebene", null),
+        mk("Dámské džíny Levi's 501, vel. 30", "obleceni-damske", "jako-nove", "sell"),
+        mk("Plyšový medvěd", "hracka", "dobre", "donate"),
+        mk("Sada 6 hrnků IKEA", "nadobi", "dobre", "donate"),
+        mk("Stolní ventilátor (nefunkční)", "elektronika", "opotrebene", "trash"),
+        mk("Štos detektivek (8 ks)", "kniha", "dobre", "maybe", {reviewAt: midnight() - 40*DAY}),
+      ],
+    };
+  }
+  function load(){ try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch(e){ return null; } }
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){ toast("Došlo místo v prohlížeči — vymaž rozhodnuté věci."); } }
+  let S = load() || seed();
+  if (S.sprint && S.sprint.endsAt <= Date.now()) S.sprint = null;
+
+  let lastAction = null;
+  let sprintTimer = null;
+  let animating = false;
+  let curPileKey = null;
+
+  /* ---------- helpers ---------- */
+  const pending = () => S.items.filter(i => !i.decision);
+  const curP = () => S.players.find(p => p.id === S.currentPlayer) || S.players[0];
+  const countBy = d => S.items.filter(i => i.decision === d).length;
+  const initials = n => (n.trim()[0] || "?").toUpperCase();
+  function levelOf(xp){
+    let i = 0;
+    LEVELS.forEach((l, idx) => { if (xp >= l.min) i = idx; });
+    const next = LEVELS[i+1];
+    return { idx:i, name:LEVELS[i].name, into:xp - LEVELS[i].min,
+             span: next ? next.min - LEVELS[i].min : null, toNext: next ? next.min - xp : null };
+  }
+  function streakAlive(){ return S.streak.last >= midnight() - DAY; }
+  function touchStreak(){
+    const t = midnight();
+    if (S.streak.last === t) return;
+    S.streak.count = (S.streak.last === t - DAY) ? S.streak.count + 1 : 1;
+    S.streak.last = t;
+  }
+
+  /* ---------- render ---------- */
+  function render(){
+    renderTopbar();
+    renderScroll();
+    renderDock();
+    save();
+  }
+
+  function renderTopbar(){
+    const p = curP(), lv = levelOf(p.xp);
+    const fill = lv.span ? Math.min(100, Math.round(lv.into / lv.span * 100)) : 100;
+    const alive = streakAlive();
+    $("#topbar").innerHTML = `
+      <div class="topbar__row">
+        <div class="wordmark">${ic("flame","flame")} Vyklízecí sprint</div>
+        <button class="iconbtn" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>
+        <button class="iconbtn" data-act="settings" aria-label="Nastavení">${ic("gear")}</button>
+      </div>
+      <div class="statrow">
+        <button class="pchip" data-act="players">
+          <span class="av">${esc(initials(p.name))}</span>${esc(p.name)} <span class="car">▾</span>
+        </button>
+        <span class="streak ${alive?"":"dead"}" title="Série dní v řadě">${ic("flame")}<b>${alive?S.streak.count:0}</b></span>
+        <span class="xp">
+          <span class="xp__meta"><span>${esc(lv.name)}</span><span>${lv.toNext!=null?("+"+lv.toNext+" XP"):"MAX"}</span></span>
+          <span class="xp__bar"><span class="xp__fill" style="width:${fill}%"></span></span>
+        </span>
+      </div>`;
+  }
+
+  function cardMarkup(it, top){
+    const c = CAT[it.cat] || CAT.jine;
+    const e = estimate(it.cat, it.cond);
+    const photo = it.photo
+      ? `<img src="${it.photo}" alt="">`
+      : `<span class="bigic">${ic(c.icon)}</span>`;
+    const stamps = top ? `
+      <div class="stamp" data-dir="keep">Nechat</div>
+      <div class="stamp" data-dir="sell">Prodat</div>
+      <div class="stamp" data-dir="trash">Vyhodit</div>
+      <div class="stamp" data-dir="donate">Darovat</div>` : "";
+    return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
+      <div class="card__photo">${photo}${stamps}</div>
+      <div class="card__body">
+        <div class="card__name">${esc(it.name)}</div>
+        <div class="tags">
+          <span class="tag">${ic(c.icon)}${esc(c.short)}</span>
+          <span class="tag">${esc((COND[it.cond]||COND.dobre).label)}</span>
+        </div>
+        <div class="estimate"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span><strong>Odhad ${kc(e.lo)}–${kc(e.hi)}</strong> · ${esc(e.advice)}</div>
+      </div>
+    </article>`;
+  }
+
+  function stageMarkup(){
+    const pend = pending();
+    if (!pend.length){
+      return `<div class="emptystate">
+        <div class="big">${ic("check")}</div>
+        <h3>Stack je prázdný</h3>
+        <p>Každá věc má jasno. Přidej další, nebo si dej vyklízecí sprint.</p>
+      </div>`;
+    }
+    const cards = [];
+    if (pend[1]) cards.push(cardMarkup(pend[1], false));
+    cards.push(cardMarkup(pend[0], true));
+    const hint = !S.seenHint ? `<div class="hint">Táhni kartu do stran nebo ťukni na volbu · ← vyhodit · → prodat · ↑ nechat · ↓ darovat</div>` : "";
+    return `<div class="stage"><div class="cardstack">${cards.join("")}${hint}</div></div>
+      <div class="decisions">
+        <button class="dbtn" style="--h:var(--keep)"   data-decide="keep">${ic("home")}Nechat<small>${nVeci(countBy("keep"))}</small></button>
+        <button class="dbtn" style="--h:var(--sell)"   data-decide="sell">${ic("tag")}Prodat<small>${nVeci(countBy("sell"))}</small></button>
+        <button class="dbtn" style="--h:var(--donate)" data-decide="donate">${ic("gift")}Darovat<small>${nVeci(countBy("donate"))}</small></button>
+        <button class="dbtn" style="--h:var(--trash)"  data-decide="trash">${ic("bin")}Vyhodit<small>${nVeci(countBy("trash"))}</small></button>
+      </div>
+      <div class="subrow">
+        <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
+        <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
+      </div>`;
+  }
+
+  function pilesMarkup(){
+    const rows = [["keep","Nechat"],["sell","Prodat"],["donate","Darovat"],["trash","Vyhodit"]]
+      .map(([k,l]) => `<button class="pile" style="--h:var(${DEC[k].cvar})" data-pile="${k}">
+        <b>${countBy(k)}</b><span>${l}</span></button>`).join("");
+    const maybeItems = S.items.filter(i => i.decision === "maybe");
+    let year = "";
+    if (maybeItems.length){
+      const overdue = maybeItems.filter(i => i.reviewAt && i.reviewAt < Date.now()).length;
+      year = `<button class="yearbox ${overdue?"warn":""}" data-pile="maybe">
+        <span>
+          <span class="t">Krabice na rok · ${nVeci(maybeItems.length)}</span>
+          <span class="s">${overdue ? overdue+" čeká moc dlouho — čas rozhodnout" : "Připomene se, až uplyne půl roku"}</span>
+        </span><span class="go">→</span></button>`;
+    }
+    return `<div class="sec"><h2>Rozhodnuto</h2><div class="pilerow">${rows}</div>${year}</div>`;
+  }
+
+  function boardMarkup(){
+    const ranked = [...S.players].sort((a,b) => b.xp - a.xp);
+    const medal = i => i===0?"var(--gold)":i===1?"var(--silver)":i===2?"var(--bronze)":"transparent";
+    return `<div class="sec"><h2>Rodinný žebříček</h2><div class="board">${
+      ranked.map((p,i) => `<div class="brow ${p.id===S.currentPlayer?"me":""}">
+        <span class="rk">${i+1}</span>
+        <span class="medal" style="background:${medal(i)}"></span>
+        <span class="nm">${esc(p.name)}</span>
+        <span class="xpv">${p.xp} XP</span></div>`).join("")
+    }</div></div>`;
+  }
+
+  function renderScroll(){
+    const banner = S.example
+      ? `<div class="demobanner"><span>Hraješ na ukázkových datech.</span><button data-act="settings">Vymazat →</button></div>`
+      : "";
+    $("#scroll").innerHTML = banner + stageMarkup() + pilesMarkup() + boardMarkup() + `<div style="height:8px"></div>`;
+    wireCard();
+  }
+
+  function renderDock(){
+    const dock = $("#dock");
+    if (S.sprint){
+      dock.innerHTML = `<div class="sprintbar">
+        ${ic("bolt")}
+        <span class="clock">${fmtLeft()}</span>
+        <span class="z">${esc(S.sprint.zone)} · vyřešeno ${S.sprint.resolved}</span>
+        <button data-act="endsprint">Konec</button>
+      </div>`;
+    } else if (pending().length){
+      dock.innerHTML = `
+        <button class="btn btn--accent" data-act="sprint">${ic("bolt")}Spustit sprint</button>
+        <button class="btn btn--ghost" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>`;
+    } else {
+      dock.innerHTML = `
+        <button class="btn btn--primary" data-act="add">${ic("plus")}Přidat věc</button>
+        <button class="btn btn--ghost" data-act="sprint">${ic("bolt")}Sprint</button>`;
+    }
+  }
+
+  /* ---------- card interaction ---------- */
+  function wireCard(){
+    const card = $(".card--top");
+    if (!card) return;
+    const stamps = card.querySelectorAll(".stamp");
+    let sx=0, sy=0, dx=0, dy=0, dragging=false;
+    const dirOf = () => Math.abs(dx) > Math.abs(dy) ? (dx>0?"sell":"trash") : (dy>0?"donate":"keep");
+    const clearStamps = () => stamps.forEach(s => s.style.opacity = 0);
+
+    card.addEventListener("pointerdown", e => {
+      dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0;
+      card.setPointerCapture(e.pointerId); card.style.transition = "none";
+    });
+    card.addEventListener("pointermove", e => {
+      if (!dragging) return;
+      dx = e.clientX - sx; dy = e.clientY - sy;
+      card.style.transform = `translate(${dx}px,${dy}px) rotate(${dx*0.05}deg)`;
+      const d = dirOf(), dist = Math.hypot(dx, dy);
+      stamps.forEach(s => s.style.opacity = s.dataset.dir === d ? Math.min(1, (dist-20)/80) : 0);
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      const d = dirOf(), dist = Math.hypot(dx, dy);
+      if (dist > 92){ flyOut(card, d, dx, dy); }
+      else { card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearStamps(); }
+    };
+    card.addEventListener("pointerup", end);
+    card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearStamps(); });
+
+    card.addEventListener("keydown", e => {
+      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe",
+        ArrowUp:"keep", ArrowRight:"sell", ArrowDown:"donate", ArrowLeft:"trash"};
+      if (map[e.key]){ e.preventDefault(); e.stopPropagation(); pressDecide(map[e.key]); }
+    });
+  }
+
+  function flyOut(card, decision, dx, dy){
+    if (animating) return;
+    animating = true;
+    if (RM){ decide(decision); return; }
+    const ux = dx || (decision==="sell"?1:decision==="trash"?-1:0);
+    const uy = dy || (decision==="keep"?-1:decision==="donate"?1:0);
+    const m = 760 / (Math.hypot(ux,uy) || 1);
+    card.style.transition = "transform .34s ease-out, opacity .34s ease-out";
+    card.style.transform = `translate(${ux*m}px,${uy*m}px) rotate(${(dx||ux*40)*0.08}deg)`;
+    card.style.opacity = "0";
+    let done = false;
+    const go = () => { if (done) return; done = true; decide(decision); };
+    card.addEventListener("transitionend", go, {once:true});
+    setTimeout(go, 420);
+  }
+
+  function pressDecide(decision){
+    if (animating) return;
+    const card = $(".card--top");
+    if (!card || RM){ decide(decision); return; }
+    const v = {keep:[0,-1], sell:[1,0], donate:[0,1], trash:[-1,0], maybe:[0,1]}[decision] || [1,0];
+    flyOut(card, decision, v[0]*120, v[1]*120);
+  }
+
+  function decide(decision){
+    animating = false;
+    const it = pending()[0];
+    if (!it) return;
+    const p = curP();
+    const beforeLv = levelOf(p.xp).idx;
+    it.decision = decision;
+    it.decidedAt = Date.now();
+    it.decidedBy = p.id;
+    if (decision === "maybe" && !it.reviewAt) it.reviewAt = midnight() + 182*DAY;
+    let gain = 10;
+    if (S.sprint){ gain += 5; S.sprint.resolved += 1; }
+    p.xp += gain;
+    touchStreak();
+    S.seenHint = true;
+    lastAction = {itemId: it.id, playerId: p.id, gain};
+    render();
+    const leveled = levelOf(p.xp).idx > beforeLv;
+    if (leveled){ confetti(); toast(`Level up · ${levelOf(p.xp).name}!`); }
+    else toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", undoLast);
+  }
+
+  function undoLast(){
+    if (!lastAction) return;
+    const it = S.items.find(i => i.id === lastAction.itemId);
+    if (it){ it.decision = null; it.decidedAt = null; it.decidedBy = null; }
+    const p = S.players.find(x => x.id === lastAction.playerId);
+    if (p) p.xp = Math.max(0, p.xp - lastAction.gain);
+    if (S.sprint) S.sprint.resolved = Math.max(0, S.sprint.resolved - 1);
+    lastAction = null;
+    render();
+  }
+
+  /* ---------- sprint ---------- */
+  function fmtLeft(){
+    if (!S.sprint) return "0:00";
+    const s = Math.max(0, Math.round((S.sprint.endsAt - Date.now()) / 1000));
+    return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+  }
+  function startSprintTimer(){
+    clearInterval(sprintTimer);
+    sprintTimer = setInterval(() => {
+      if (!S.sprint){ clearInterval(sprintTimer); return; }
+      const clock = $("#dock .clock");
+      if (clock) clock.textContent = fmtLeft();
+      if (S.sprint.endsAt <= Date.now()) endSprint(false);
+    }, 1000);
+  }
+  function beginSprint(zone, minutes){
+    S.sprint = {zone, minutes, endsAt: Date.now() + minutes*60000, resolved: 0, startXp: curP().xp};
+    closeSheet(); render(); startSprintTimer();
+  }
+  function endSprint(early){
+    if (!S.sprint) return;
+    const sp = S.sprint;
+    const p = curP();
+    let bonus = 0;
+    if (sp.resolved > 0){ bonus = 25; p.xp += bonus; }
+    const gained = p.xp - sp.startXp;
+    S.sprint = null;
+    S.sprintsDone = (S.sprintsDone||0) + (sp.resolved>0 ? 1 : 0);
+    clearInterval(sprintTimer);
+    render();
+    if (sp.resolved > 0 && !RM) confetti();
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>${sp.resolved > 0 ? "Sprint hotový 💪" : "Sprint ukončen"}</h3>
+      <p class="sub">${esc(sp.zone)} · ${sp.minutes} min</p>
+      <div class="list">
+        <div class="li"><span class="li__ph">${ic("check")}</span><div class="li__t"><div class="li__n">Vyřešeno kusů</div><div class="li__s">během sprintu</div></div><b style="font-family:var(--font-mono)">${sp.resolved}</b></div>
+        <div class="li"><span class="li__ph">${ic("bolt")}</span><div class="li__t"><div class="li__n">Získáno XP</div><div class="li__s">${bonus?("+"+bonus+" bonus za dokončení"):"bez bonusu"}</div></div><b style="font-family:var(--font-mono)">+${gained}</b></div>
+        <div class="li"><span class="li__ph">${ic("flame")}</span><div class="li__t"><div class="li__n">Série</div><div class="li__s">dní v řadě</div></div><b style="font-family:var(--font-mono)">${streakAlive()?S.streak.count:0}</b></div>
+      </div>
+      <div class="sheet__actions"><button class="btn btn--primary" data-act="close">Zavřít</button></div>
+    `);
+  }
+
+  /* ---------- sheets ---------- */
+  const modalRoot = $("#modal-root");
+  function openSheet(html){
+    modalRoot.innerHTML = `<div class="overlay"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`;
+    const ov = $(".overlay", modalRoot);
+    ov.addEventListener("pointerdown", e => { if (e.target === ov) closeSheet(); });
+  }
+  function closeSheet(){ modalRoot.innerHTML = ""; }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
+
+  function sheetAddItem(){
+    const draft = {name:"", cat:"obleceni-detske", cond:"dobre", photo:null};
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>Přidat věc</h3>
+      <p class="sub">Vyfoť ji nebo jen napiš — odhad ceny se dopočítá.</p>
+      <div class="field">
+        <label>Fotka (nepovinné)</label>
+        <label class="photopick" id="pp">${ic("photo")}<span>Vyfotit / vybrat</span>
+          <input type="file" accept="image/*" hidden id="pf"></label>
+      </div>
+      <div class="field"><label>Co to je</label>
+        <input class="input" id="pn" placeholder="např. Dětská bunda vel. 104" autocomplete="off"></div>
+      <div class="field"><label>Kategorie</label>
+        <div class="chips" id="pc">${CATS.map(c => `<button type="button" class="chip" data-c="${c.id}" aria-pressed="${c.id===draft.cat}">${ic(c.icon)}${esc(c.short)}</button>`).join("")}</div></div>
+      <div class="field"><label>Stav</label>
+        <div class="segment" id="pcond">${CONDS.map(c => `<button type="button" class="seg" data-k="${c.id}" aria-pressed="${c.id===draft.cond}">${esc(c.label)}</button>`).join("")}</div></div>
+      <div class="field"><label>Odhad</label><div class="estimate" id="pest"></div></div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" data-act="close">Zrušit</button>
+        <button class="btn btn--primary" id="padd">Přidat do stacku</button>
+      </div>
+    `);
+    const estBox = $("#pest");
+    const refreshEst = () => {
+      const e = estimate(draft.cat, draft.cond);
+      estBox.innerHTML = `<span class="dot" style="background:var(${DEC[e.channel].cvar})"></span><strong>${kc(e.lo)}–${kc(e.hi)}</strong> · ${esc(e.advice)}`;
+    };
+    refreshEst();
+    $("#pn").addEventListener("input", e => draft.name = e.target.value);
+    $("#pc").addEventListener("click", e => {
+      const b = e.target.closest("[data-c]"); if (!b) return;
+      draft.cat = b.dataset.c;
+      $("#pc").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x === b));
+      refreshEst();
+    });
+    $("#pcond").addEventListener("click", e => {
+      const b = e.target.closest("[data-k]"); if (!b) return;
+      draft.cond = b.dataset.k;
+      $("#pcond").querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", x === b));
+      refreshEst();
+    });
+    $("#pf").addEventListener("change", e => {
+      const f = e.target.files[0]; if (!f) return;
+      downscale(f, url => { draft.photo = url; $("#pp").innerHTML = `<img src="${url}" alt="">`; });
+    });
+    $("#padd").addEventListener("click", () => {
+      const name = draft.name.trim();
+      if (!name){ $("#pn").focus(); $("#pn").style.borderColor = "var(--trash)"; return; }
+      S.items.unshift({
+        id: uid(), name, cat: draft.cat, cond: draft.cond, photo: draft.photo, note: "",
+        decision: null, createdAt: Date.now(), decidedAt: null, decidedBy: null,
+      });
+      closeSheet(); render();
+      toast("Přidáno do stacku");
+    });
+  }
+
+  function sheetPile(key){
+    curPileKey = key;
+    const items = S.items.filter(i => i.decision === key);
+    const isMaybe = key === "maybe";
+    const title = isMaybe ? "Krabice na rok" : DEC[key].label;
+    let head = "";
+    if (key === "sell"){
+      const tot = items.reduce((a,i) => { const e = estimate(i.cat,i.cond); return {lo:a.lo+e.lo, hi:a.hi+e.hi}; }, {lo:0,hi:0});
+      head = items.length ? `<p class="sub">Odhadovaný výtěžek celkem ${kc(tot.lo)} – ${kc(tot.hi)}.</p>` : "";
+    } else if (key === "donate"){
+      head = `<p class="sub">Textil → kontejner Diakonie / charita. Hračky a knihy → místní sbírka nebo Knihobudka.</p>`;
+    } else if (key === "trash"){
+      head = `<p class="sub">Textil patří do kontejneru na textil, elektro do sběrného dvora — ne do směsného.</p>`;
+    } else if (isMaybe){
+      head = `<p class="sub">Co se za půl roku ani nehne, to nejspíš nepotřebuješ.</p>`;
+    }
+    const rows = items.map(i => {
+      const c = CAT[i.cat] || CAT.jine;
+      const e = estimate(i.cat, i.cond);
+      let sub = key === "sell" ? `${kc(e.lo)}–${kc(e.hi)}` : c.short;
+      let action = `<button class="li__b" data-return="${i.id}">Zpět do stacku</button>`;
+      if (isMaybe){
+        const over = i.reviewAt && i.reviewAt < Date.now();
+        sub = over ? "leží tu už " + Math.round((Date.now()-(i.reviewAt-182*DAY))/DAY) + " dní" : "připomene se " + new Date(i.reviewAt).toLocaleDateString("cs-CZ");
+        action = `<button class="li__b" data-move="donate:${i.id}" style="color:var(--donate)">Darovat</button>`;
+      }
+      return `<div class="li">
+        <span class="li__ph">${i.photo?`<img src="${i.photo}" alt="">`:ic(c.icon)}</span>
+        <div class="li__t"><div class="li__n">${esc(i.name)}</div><div class="li__s">${esc(sub)}</div></div>
+        ${action}</div>`;
+    }).join("");
+    const copyBtn = (key === "sell" || key === "donate") && items.length
+      ? `<button class="btn btn--ghost" id="copylist">Zkopírovat seznam</button>` : "";
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>${esc(title)} · ${items.length}</h3>
+      ${head}
+      <div class="list">${rows || `<div class="empty-note">Zatím nic.</div>`}</div>
+      <div class="sheet__actions">
+        ${copyBtn}
+        <button class="btn btn--primary" data-act="close">Hotovo</button>
+      </div>
+    `);
+    $("#copylist") && $("#copylist").addEventListener("click", () => {
+      const lines = items.map(i => {
+        const e = estimate(i.cat, i.cond);
+        return key === "sell" ? `• ${i.name} — ${kc(e.lo)}–${kc(e.hi)}` : `• ${i.name}`;
+      });
+      const text = (key==="sell" ? "Na prodej:\n" : "K darování:\n") + lines.join("\n");
+      navigator.clipboard?.writeText(text).then(() => toast("Zkopírováno")).catch(() => toast("Nepodařilo se zkopírovat"));
+    });
+  }
+
+  function sheetSprint(){
+    let zone = ZONES[0], mins = 15;
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>Vyklízecí sprint</h3>
+      <p class="sub">Nastav si čas na jednu zónu a projdi co nejvíc věcí. Během sprintu je +5 XP navíc za kus.</p>
+      <div class="field"><label>Zóna</label>
+        <div class="chips" id="sz">${ZONES.map(z => `<button type="button" class="chip" data-z="${esc(z)}" aria-pressed="${z===zone}">${esc(z)}</button>`).join("")}</div></div>
+      <div class="field"><label>Délka</label>
+        <div class="segment" id="sm">${[10,15,25].map(m => `<button type="button" class="seg" data-m="${m}" aria-pressed="${m===mins}">${m} min</button>`).join("")}</div></div>
+      <div class="sheet__actions">
+        <button class="btn btn--ghost" data-act="close">Zrušit</button>
+        <button class="btn btn--accent" id="sgo">${ic("bolt")}Start</button>
+      </div>
+    `);
+    $("#sz").addEventListener("click", e => { const b = e.target.closest("[data-z]"); if (!b) return; zone = b.dataset.z; $("#sz").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x===b)); });
+    $("#sm").addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (!b) return; mins = +b.dataset.m; $("#sm").querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", x===b)); });
+    $("#sgo").addEventListener("click", () => beginSprint(zone, mins));
+  }
+
+  function sheetPlayers(){
+    const ranked = [...S.players].sort((a,b) => b.xp - a.xp);
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>Hráči</h3>
+      <p class="sub">Přepni, kdo právě třídí. XP a série se počítají zvlášť.</p>
+      <div class="list" id="plist">
+        ${ranked.map(p => `<div class="li">
+          <span class="li__ph" style="background:var(--accent);color:#fff">${esc(initials(p.name))}</span>
+          <div class="li__t"><div class="li__n">${esc(p.name)}${p.id===S.currentPlayer?" · právě hraje":""}</div><div class="li__s">${p.xp} XP · ${esc(levelOf(p.xp).name)}</div></div>
+          ${p.id===S.currentPlayer ? "" : `<button class="li__b" data-pick="${p.id}">Hrát za</button>`}
+          ${S.players.length>1 ? `<button class="li__b" data-del="${p.id}" style="color:var(--trash)">✕</button>` : ""}
+        </div>`).join("")}
+      </div>
+      <div class="field" style="margin-top:10px"><label>Přidat hráče</label>
+        <div style="display:flex;gap:8px">
+          <input class="input" id="npn" placeholder="Jméno" autocomplete="off">
+          <button class="btn btn--primary" id="npadd" style="padding:10px 16px">Přidat</button>
+        </div>
+      </div>
+      <div class="sheet__actions"><button class="btn btn--ghost" data-act="close">Hotovo</button></div>
+    `);
+    $("#plist").addEventListener("click", e => {
+      const pick = e.target.closest("[data-pick]"), del = e.target.closest("[data-del]");
+      if (pick){ S.currentPlayer = pick.dataset.pick; render(); sheetPlayers(); }
+      if (del){
+        S.players = S.players.filter(p => p.id !== del.dataset.del);
+        if (S.currentPlayer === del.dataset.del) S.currentPlayer = S.players[0].id;
+        render(); sheetPlayers();
+      }
+    });
+    $("#npadd").addEventListener("click", () => {
+      const n = $("#npn").value.trim(); if (!n) return;
+      S.players.push({id: uid(), name: n, xp: 0});
+      render(); sheetPlayers();
+    });
+  }
+
+  function sheetSettings(){
+    const stored = S.items.length;
+    openSheet(`
+      <div class="sheet__grip"></div>
+      <h3>Nastavení</h3>
+      <div class="settings-row"><span>Věcí v aplikaci</span><span style="font-family:var(--font-mono)">${stored}</span></div>
+      <div class="settings-row"><span>Dokončených sprintů</span><span style="font-family:var(--font-mono)">${S.sprintsDone||0}</span></div>
+      <div class="settings-row"><span>Ukázková data</span><button ${S.example?"":"disabled"} id="wipedemo">Vymazat ukázky</button></div>
+      <div class="settings-row"><span>Začít úplně znovu</span><button class="danger" id="wipeall">Smazat vše</button></div>
+      <p class="sub" style="margin-top:14px">Data zůstávají jen v tomhle prohlížeči (localStorage) a nikam se neodesílají. Fotky se před uložením zmenšují, ale i tak se jich vejde jen omezené množství — je to prototyp, ne archiv.</p>
+      <div class="sheet__actions"><button class="btn btn--primary" data-act="close">Zavřít</button></div>
+    `);
+    $("#wipedemo").addEventListener("click", () => {
+      S.items = S.items.filter(i => !i.example);
+      S.players = S.players.filter(p => !p.example);
+      if (!S.players.length) S.players = [{id: uid(), name: "Ty", xp: 0}];
+      if (!S.players.find(p => p.id === S.currentPlayer)) S.currentPlayer = S.players[0].id;
+      S.example = false;
+      closeSheet(); render(); toast("Ukázky vymazány");
+    });
+    $("#wipeall").addEventListener("click", () => {
+      try { localStorage.removeItem(KEY); } catch(e){}
+      S = seed(); S.example = true;
+      closeSheet(); render(); toast("Začínáme načisto");
+    });
+  }
+
+  /* ---------- misc ---------- */
+  function downscale(file, cb){
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 880, sc = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        try { cb(cv.toDataURL("image/jpeg", 0.72)); } catch(e){ toast("Fotku se nepodařilo zpracovat"); }
+      };
+      img.onerror = () => toast("Nepodařilo se načíst fotku");
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  }
+
+  let toastT = null;
+  function toast(msg, actionLabel, actionFn){
+    clearTimeout(toastT);
+    const old = $(".toast"); if (old) old.remove();
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.innerHTML = `<span>${esc(msg)}</span>`;
+    if (actionLabel){
+      const b = document.createElement("button");
+      b.textContent = actionLabel;
+      b.onclick = () => { el.remove(); actionFn && actionFn(); };
+      el.appendChild(b);
+    }
+    document.body.appendChild(el);
+    toastT = setTimeout(() => el.remove(), 4500);
+  }
+
+  function confetti(){
+    if (RM) return;
+    const cv = document.createElement("canvas");
+    cv.className = "confetti";
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    document.body.appendChild(cv);
+    const ctx = cv.getContext("2d"); ctx.scale(dpr, dpr);
+    const cols = ["#6B4EE6","#2C7C4C","#C27C1E","#2F6DA8","#BD4536"];
+    const N = 110;
+    const parts = Array.from({length:N}, () => ({
+      x: innerWidth/2 + (Math.random()-.5)*80,
+      y: innerHeight/3,
+      vx: (Math.random()-.5)*9,
+      vy: Math.random()*-11 - 3,
+      r: Math.random()*5 + 3,
+      c: cols[(Math.random()*cols.length)|0],
+      rot: Math.random()*6.28,
+      vr: (Math.random()-.5)*0.4,
+    }));
+    const t0 = performance.now();
+    (function frame(now){
+      const dt = now - t0;
+      ctx.clearRect(0,0,innerWidth,innerHeight);
+      parts.forEach(p => {
+        p.vy += 0.32; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.vx *= 0.99;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.r, -p.r*0.6, p.r*2, p.r*1.2);
+        ctx.restore();
+      });
+      if (dt < 1500) requestAnimationFrame(frame);
+      else cv.remove();
+    })(t0);
+  }
+
+  /* ---------- global events ---------- */
+  document.addEventListener("click", e => {
+    const ret = e.target.closest("[data-return]");
+    if (ret){
+      const it = S.items.find(x => x.id === ret.dataset.return);
+      if (it){ it.decision = null; it.decidedAt = null; it.decidedBy = null; }
+      render(); if (curPileKey) sheetPile(curPileKey);
+      return;
+    }
+    const mv = e.target.closest("[data-move]");
+    if (mv){
+      const [d, id] = mv.dataset.move.split(":");
+      const it = S.items.find(x => x.id === id);
+      if (it){ it.decision = d; it.decidedAt = Date.now(); it.decidedBy = S.currentPlayer; }
+      render(); if (curPileKey) sheetPile(curPileKey);
+      return;
+    }
+    const dec = e.target.closest("[data-decide]");
+    if (dec){ pressDecide(dec.dataset.decide); return; }
+    const pile = e.target.closest("[data-pile]");
+    if (pile){ sheetPile(pile.dataset.pile); return; }
+    const act = e.target.closest("[data-act]");
+    if (!act) return;
+    const a = act.dataset.act;
+    if (a === "add") sheetAddItem();
+    else if (a === "sprint") sheetSprint();
+    else if (a === "endsprint") endSprint(true);
+    else if (a === "players") sheetPlayers();
+    else if (a === "settings") sheetSettings();
+    else if (a === "close") closeSheet();
+    else if (a === "skip"){
+      const it = pending()[0];
+      if (it && pending().length > 1){ S.items = S.items.filter(x => x !== it).concat([it]); render(); }
+    }
+  });
+  document.addEventListener("keydown", e => {
+    if (modalRoot.innerHTML || document.activeElement?.classList.contains("input")) return;
+    const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe"};
+    if (map[e.key] && pending().length){ e.preventDefault(); pressDecide(map[e.key]); }
+  });
+
+  render();
+  if (S.sprint) startSprintTimer();
+})();
+</script>
