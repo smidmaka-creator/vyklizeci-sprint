@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.0 · 9. 9. 2026";
+  const APP_VERSION = "0.8.1 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -132,14 +132,17 @@
   const players = () => DB.players();
   const items = () => DB.items();
   // fronta: "mine" = jen moje věci, "all" = všechny (moje napřed, pak společné, pak cizí)
-  let queueMode = localStorage.getItem("vs.queue") || "mine";
-  const rank = i => i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1);
+  // při startu vždy Moje, pokud tam něco je; přepnutí platí do dalšího spuštění
+  let queueMode = "mine";
+  let pinId = null;                                    // věc vrácená z krabice na rok → dočasně nahoře
+  const rank = i => i.id === pinId ? -1 : (i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1));
   const pendingAll = () => items().filter(i => !i.decision).sort((a, b) => rank(a) - rank(b));
   const myPending = () => items().filter(i => !i.decision && i.owner_id === meId);
-  const pending = () => queueMode === "mine" ? myPending() : pendingAll();
+  const pending = () => queueMode === "mine" ? myPending().sort((a, b) => rank(a) - rank(b)) : pendingAll();
   const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
   const decidedTodayByMe = () => items().filter(i => i.decided_by === meId && i.decided_at && new Date(i.decided_at).getTime() >= startOfToday()).length;
-  function setQueue(mode){ queueMode = mode; localStorage.setItem("vs.queue", mode); }
+  function setQueue(mode){ queueMode = mode; pinId = null; }
+  const defaultQueue = () => { queueMode = myPending().length ? "mine" : "all"; };
   function setTab(t){ tab = t; localStorage.setItem("vs.tab", t); }
   const countBy = d => items().filter(i => i.decision === d).length;
   const me = () => players().find(p => p.id === meId) || null;
@@ -250,9 +253,7 @@
         <button type="button" class="seg" data-queue="all" aria-pressed="${queueMode==="all"}">Všechny · ${all.length}</button>
       </div></div>` : "";
     const done = decidedTodayByMe();
-    let banner = "";
-    if (queueMode === "mine" && mine.length) banner = `<div class="mybanner">${ic("bolt")}Zbývá ti ${nVeci(mine.length)}${done ? ` · dnes vyřízeno ${done}` : ""}</div>`;
-    else if (queueMode === "all" && mine.length) banner = `<div class="mybanner mybanner--nudge"><span>${ic("bolt")}Máš ${nVeci(mine.length)} k vyřízení</span><button type="button" data-queue="mine">Ukázat moje</button></div>`;
+    const banner = "";
     if (!pend.length){
       if (queueMode === "mine" && all.length){
         return filter + `<div class="emptystate">
@@ -406,6 +407,7 @@
     const gain = 10;
     const beforeLv = levelOf(p.xp).idx;
     localStorage.setItem("vs.seenHint", "1");
+    if (pinId === it.id) pinId = null;
     try {
       await DB.decideItem(it.id, decision, p.id);
       const after = await DB.awardXp(p.id, gain);
@@ -518,7 +520,7 @@
     $("#npn").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
     setTimeout(() => $("#npn")?.focus(), 50);
   }
-  function setMe(id){ meId = id; if (id) localStorage.setItem(playerKey(), id); else localStorage.removeItem(playerKey()); if (id && myPending().length === 0) queueMode = "all"; }
+  function setMe(id){ meId = id; if (id) localStorage.setItem(playerKey(), id); else localStorage.removeItem(playerKey()); if (id) defaultQueue(); }
 
   // Formulář věci: existing = null → přidat; jinak upravit. opts.fromPile = klíč hromádky, kam se po uložení vrátit.
   function sheetItemForm(existing, opts = {}){
@@ -661,7 +663,8 @@
       if (isMaybe){
         const over = i.review_at && new Date(i.review_at).getTime() < Date.now();
         sub = over ? "leží tu už " + Math.round((Date.now() - (new Date(i.review_at).getTime() - 182*DAY)) / DAY) + " dní" : "připomene se " + new Date(i.review_at).toLocaleDateString("cs-CZ");
-        action = `<button class="li__b" data-move="donate:${i.id}" style="background:var(--salmon-soft);color:var(--salmon)">Darovat</button>`;
+        // Rozhodnout = vrátit do stacku a rovnou tam skočit (všechny čtyři možnosti); Darovat = zkratka
+        action = `<button class="li__b" data-return="${i.id}" data-jump="1">Rozhodnout</button><button class="li__b" data-move="donate:${i.id}" style="background:var(--salmon-soft);color:var(--salmon)">Darovat</button>`;
       }
       const url = DB.photoUrl(i);
       return `<div class="li">
@@ -797,7 +800,18 @@
     const ed = e.target.closest("[data-edit]");
     if (ed){ const it = items().find(x => x.id === ed.dataset.edit); if (it) sheetItemForm(it, { fromPile: ed.closest(".sheet") ? curPileKey : null }); return; }
     const ret = e.target.closest("[data-return]");
-    if (ret){ try { await DB.returnItem(ret.dataset.return); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
+    if (ret){
+      try {
+        await DB.returnItem(ret.dataset.return);
+        if (ret.dataset.jump){                                   // z krabice na rok rovnou na kartu (nahoře)
+          const it = items().find(x => x.id === ret.dataset.return);
+          if (it && it.owner_id !== meId) setQueue("all");
+          pinId = ret.dataset.return;
+          forceCloseSheet(); setTab("stack"); render();
+        } else { render(); if (curPileKey) sheetPile(curPileKey); }
+      } catch(err){ toast(err.message); }
+      return;
+    }
     const mv = e.target.closest("[data-move]");
     if (mv){ const [d, id] = mv.dataset.move.split(":"); try { await DB.decideItem(id, d, meId); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
     const dec = e.target.closest("[data-decide]");
@@ -831,7 +845,7 @@
         const first = await DB.seedExample(); localStorage.setItem("vs.local.touched", "1"); if (first) setMe(first);
       }
       meId = localStorage.getItem(playerKey());
-      if (queueMode === "mine" && myPending().length === 0) queueMode = "all";
+      defaultQueue();
       ready = true;
       render();
     } catch(e){
