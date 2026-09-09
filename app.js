@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.3 · 9. 9. 2026";
+  const APP_VERSION = "0.8.4 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
