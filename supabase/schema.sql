@@ -1,5 +1,5 @@
 -- ============================================================
--- Vyklízecí sprint — databázové schéma pro Supabase
+-- Vyklízečka — databázové schéma pro Supabase
 -- Spusť celé v Supabase → SQL Editor → New query → Run.
 -- Předpoklad: v Authentication → Providers je zapnuté "Anonymous sign-ins".
 -- ============================================================

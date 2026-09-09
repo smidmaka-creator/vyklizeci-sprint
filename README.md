@@ -1,12 +1,12 @@
-# Vyklízecí sprint
+# Vyklízečka
 
 Rodinná appka na zábavné protřídění věcí v přeplněném bytě — oblečení, hračky, nádobí, elektro.
+(Dřív „Vyklízecí sprint"; název repa a URL zůstaly.)
 Vanilla JS bez buildu; data buď jen v prohlížeči (lokální režim), nebo sdílená mezi telefony celé rodiny přes Supabase.
 
 ## Co umí
 
 - **Karty jako Tinder** — u každé věci swipneš (nebo ťukneš) rozhodnutí: ← Vyhodit · → Prodat · ↑ Nechat · ↓ Darovat, navíc *Krabice na rok*
-- **Vyklízecí sprint** — časovka na jednu zónu (10 / 15 / 25 min), +5 XP za kus, ostatní vidí, že sprintuješ
 - **Gamifikace** — XP, úrovně, série dní v řadě, konfety
 - **Rodina** — jedna domácnost, každý na svém mobilu, společný stack i hromádky, živý žebříček
 - **Čí to je** — u věci se určí majitel (nebo „společné"); každý vidí napřed svoji frontu, v žebříčku je vidět, kdo kolik má k vyřízení (`supabase/migrations/003_owner.sql` pro starší DB)

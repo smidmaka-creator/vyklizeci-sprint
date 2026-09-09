@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.1 · 9. 9. 2026";
+  const APP_VERSION = "0.8.2 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -165,7 +165,7 @@
     const alive = p ? streakAlive(p) : false;
     $("#topbar").innerHTML = `
       <div class="topbar__row">
-        <div class="wordmark">${ic("leaf")} Vyklízecí <em>sprint</em></div>
+        <div class="wordmark">${ic("leaf")} Vyklíze<em>čka</em></div>
         <button class="iconbtn iconbtn--solid" data-act="add" aria-label="Přidat věc">${ic("plus")}</button>
         <button class="iconbtn" data-act="settings" aria-label="Nastavení">${ic("gear")}</button>
       </div>
@@ -453,7 +453,7 @@
       : `<div class="field"><label>Kód domácnosti</label><input class="input input--code" id="hc" placeholder="ABC123" maxlength="6" autocomplete="off" autocapitalize="characters"></div>`;
     openSheet(`
       <div class="sheet__grip"></div>
-      <h3>Vítej ve Vyklízecím sprintu</h3>
+      <h3>Vítej ve Vyklízečce</h3>
       <p class="sub">Založ domácnost, nebo se přidej k té, kterou už někdo z rodiny založil. Všichni pak vidí stejný stack, hromádky i žebříček.</p>
       <div class="segment" id="hmode">
         <button type="button" class="seg" data-m="create" aria-pressed="true">Založit novou</button>
