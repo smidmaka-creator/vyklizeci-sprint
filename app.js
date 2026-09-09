@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.7.0 · 9. 9. 2026";
+  const APP_VERSION = "0.8.0 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -201,28 +201,41 @@
     // vše ostatní (včetně marginů) = celkový obsah minus aktuální výška karty
     const other = el.scrollHeight - stack.offsetHeight;
     const avail = el.clientHeight - other - 4;
-    stack.style.height = Math.max(220, Math.min(420, avail)) + "px";
+    stack.style.height = Math.max(300, Math.min(600, avail)) + "px";
+    // když se stack vejde bez scrollování, karta smí reagovat i na svislý tah (k hornímu/dolnímu rohu);
+    // jinak svisle scrolluje stránka a rozhoduje se jen vodorovně nebo tlačítky
+    const card = $(".card--top");
+    if (card) card.style.touchAction = (el.scrollHeight <= el.clientHeight + 1) ? "none" : "pan-y";
   }
   addEventListener("resize", () => { if (tab === "stack") fitStack(); });
 
   /* ---------- Stack ---------- */
+  // Karta = celá fotka; čtyři rohy = čtyři rozhodnutí (↖ nechat, ↗ prodat, ↙ vyhodit, ↘ darovat)
   function cardMarkup(it, top){
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
-    const photo = url ? `<img src="${esc(url)}" alt="" loading="lazy">` : `<span class="bigic">${ic(c.icon)}</span>`;
-    const stamps = top ? `<div class="stamp" data-dir="sell">Prodat</div><div class="stamp" data-dir="trash">Vyhodit</div>` : "";
-    const editBtn = top ? `<button class="card__edit" data-edit="${it.id}" aria-label="Upravit">${ic("pencil")}</button>` : "";
+    const photo = url
+      ? `<img class="bg" src="${esc(url)}" alt="" aria-hidden="true"><img class="fg" src="${esc(url)}" alt="" loading="lazy">`
+      : `<span class="bigic">${ic(c.icon)}</span>`;
     const owner = players().find(p => p.id === it.owner_id);
     const ownerTag = owner
       ? `<span class="tag tag--owner" style="--oc:${avColor(owner)}"><i></i>${owner.id === meId ? "Moje" : esc(owner.name)}</span>`
       : `<span class="tag">Společné</span>`;
+    const corners = top ? `
+      <button class="corner corner--tl" data-decide="keep"   style="--h:var(--keep);--edge:var(--keep-dark)">${ic("home")}Nechat</button>
+      <button class="corner corner--tr" data-decide="sell"   style="--h:var(--sell);--edge:var(--sell-dark)">${ic("tag")}Prodat</button>
+      <button class="corner corner--bl" data-decide="trash"  style="--h:var(--trash);--edge:var(--trash-dark)">${ic("bin")}Vyhodit</button>
+      <button class="corner corner--br" data-decide="donate" style="--h:var(--donate);--edge:var(--donate-dark)">${ic("gift")}Darovat</button>` : "";
     return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
-      <div class="card__photo">${photo}
-        <span class="price"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span>${kcR(e.lo, e.hi)}${e.ai ? ic("sparkle") : ""}</span>
-        ${editBtn}${stamps}
-      </div>
-      <div class="card__body">
+      <div class="card__photo">${photo}</div>
+      <div class="card__veil"></div>
+      ${corners}
+      <div class="card__cap">
+        <div class="card__caprow">
+          <span class="price"><span class="dot" style="background:var(${DEC[e.channel].cvar})"></span>${kcR(e.lo, e.hi)}${e.ai ? ic("sparkle") : ""}</span>
+          ${top ? `<button class="card__edit" data-edit="${it.id}" aria-label="Upravit">${ic("pencil")}</button>` : ""}
+        </div>
         <div class="card__name">${esc(it.name)}</div>
         <div class="tags">${ownerTag}<span class="tag">${ic(c.icon)}${esc(c.short)}</span><span class="tag">${esc((COND[it.cond]||COND.dobre).label)}</span></div>
         <div class="advice">${esc(e.advice)}</div>
@@ -258,14 +271,8 @@
     const cards = [];
     if (pend[1]) cards.push(cardMarkup(pend[1], false));
     cards.push(cardMarkup(pend[0], true));
-    const hint = !seenHint() ? `<div class="hint">${ic("arrows")} doleva vyhodit · doprava prodat · nebo ťukni</div>` : "";
+    const hint = !seenHint() ? `<div class="hint">${ic("arrows")} Táhni kartu k rohu, nebo ťukni na tlačítko v rohu</div>` : "";
     return filter + banner + `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
-      <div class="decisions">
-        <button class="dbtn press" style="--h:var(--keep);--edge:var(--keep-dark)"     data-decide="keep">${ic("home")}Nechat</button>
-        <button class="dbtn press" style="--h:var(--sell);--edge:var(--sell-dark)"     data-decide="sell">${ic("tag")}Prodat</button>
-        <button class="dbtn press" style="--h:var(--donate);--edge:var(--donate-dark)" data-decide="donate">${ic("gift")}Darovat</button>
-        <button class="dbtn press" style="--h:var(--trash);--edge:var(--trash-dark)"   data-decide="trash">${ic("bin")}Vyhodit</button>
-      </div>
       <div class="subrow">
         <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
         <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
@@ -323,41 +330,50 @@
     </div>`;
   }
 
-  /* ---------- karta: swipe jen vodorovně ---------- */
+  /* ---------- karta: tažení k rohu ---------- */
+  // směr tahu → roh: vodorovně doprava = prodat (↗), doleva = vyhodit (↙); svisle nahoru = nechat (↖), dolů = darovat (↘)
   function wireCard(){
     const card = $(".card--top");
     if (!card) return;
-    const stamps = card.querySelectorAll(".stamp");
+    const corners = { keep: card.querySelector(".corner--tl"), sell: card.querySelector(".corner--tr"), trash: card.querySelector(".corner--bl"), donate: card.querySelector(".corner--br") };
     let sx=0, sy=0, dx=0, dy=0, dragging=false, t0=0, onPhoto=false;
-    const clearStamps = () => stamps.forEach(s => s.style.opacity = 0);
+    const vertOk = () => card.style.touchAction === "none";        // svislý tah jen když se nic nescrolluje
+    const dirOf = () => {
+      if (Math.abs(dx) >= Math.abs(dy) || !vertOk()) return dx > 0 ? "sell" : "trash";
+      return dy < 0 ? "keep" : "donate";
+    };
+    const distOf = () => (Math.abs(dx) >= Math.abs(dy) || !vertOk()) ? Math.abs(dx) : Math.abs(dy);
+    const clearHot = () => { card.classList.remove("dragging"); Object.values(corners).forEach(c => c && c.classList.remove("hot")); };
     card.addEventListener("pointerdown", e => {
-      if (e.target.closest(".card__edit")) return;               // tužka: žádný drag
+      if (e.target.closest("button")) return;                    // rohy a tužka: žádný drag
       dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; t0 = Date.now();
-      onPhoto = !!e.target.closest(".card__photo img");
+      onPhoto = !!e.target.closest(".card__photo");
       card.setPointerCapture(e.pointerId); card.style.transition = "none";
     });
     card.addEventListener("pointermove", e => {
       if (!dragging) return;
       dx = e.clientX - sx; dy = e.clientY - sy;
-      // svisle = scroll (touch-action: pan-y ho pustí prohlížeči), karta reaguje jen na vodorovný pohyb
-      card.style.transform = `translateX(${dx}px) rotate(${dx*0.05}deg)`;
-      const d = dx > 0 ? "sell" : "trash", dist = Math.abs(dx);
-      stamps.forEach(s => s.style.opacity = s.dataset.dir === d ? Math.min(1, (dist-20)/80) : 0);
+      const ty = vertOk() ? dy : 0;
+      card.style.transform = `translate(${dx}px,${ty}px) rotate(${dx*0.05}deg)`;
+      const d = dirOf(), dist = distOf();
+      card.classList.toggle("dragging", dist > 24);
+      Object.entries(corners).forEach(([k, c]) => c && c.classList.toggle("hot", k === d && dist > 24));
     });
     const end = () => {
       if (!dragging) return;
       dragging = false;
-      if (Math.abs(dx) > 92) flyOut(card, dx > 0 ? "sell" : "trash", dx, 0);
+      const d = dirOf(), dist = distOf();
+      if (dist > 92) flyOut(card, d, dx, vertOk() ? dy : 0);
       else {
-        card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearStamps();
-        const img = card.querySelector(".card__photo img");
+        card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearHot();
+        const img = card.querySelector(".card__photo img.fg");
         if (onPhoto && img && Math.hypot(dx, dy) < 8 && Date.now() - t0 < 400) openViewer(img.src);
       }
     };
     card.addEventListener("pointerup", end);
-    card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearStamps(); });
+    card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearHot(); });
     card.addEventListener("keydown", e => {
-      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe", ArrowRight:"sell", ArrowLeft:"trash"};
+      const map = {"1":"keep","2":"sell","3":"donate","4":"trash","5":"maybe", ArrowUp:"keep", ArrowRight:"sell", ArrowDown:"donate", ArrowLeft:"trash"};
       if (map[e.key]){ e.preventDefault(); e.stopPropagation(); pressDecide(map[e.key]); }
     });
   }
