@@ -41,6 +41,8 @@
     copy:'<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
     wifi:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01"/>',
     sparkle:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
+    pencil:'<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17zM13 8l3 3"/>',
+    refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
   };
   const ic = (n, cls="") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||""}</svg>`;
 
@@ -79,10 +81,11 @@
   const ZONES = ["Skříň","Dětský pokoj","Kuchyň","Koupelna","Chodba","Sklep / komora","Celý byt"];
   const AV_COLORS = ["var(--green)","var(--salmon)","var(--keep)","var(--gold)","var(--maybe)","var(--trash)"];
 
-  function estimate(catId, condId){
+  // midOverride: ručně zadaná cena → doporučení se spočítá k ní, ne k tabulce
+  function estimate(catId, condId, midOverride){
     const c = CAT[catId] || CAT.jine;
     const k = (COND[condId] || COND.dobre).mult;
-    const mid = Math.round(c.base * k);
+    const mid = midOverride != null ? midOverride : Math.round(c.base * k);
     const lo = Math.max(0, Math.round(mid * 0.6 / 10) * 10);
     const hi = Math.round(mid * 1.45 / 10) * 10;
     let advice, channel;
@@ -218,6 +221,7 @@
       </div>
       <div class="subrow">
         <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
+        <button class="linkbtn" data-act="edit">${ic("pencil")}Upravit</button>
         <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
       </div>`;
   }
@@ -508,43 +512,76 @@
   }
   function setMe(id){ meId = id; if (id) localStorage.setItem(playerKey(), id); else localStorage.removeItem(playerKey()); }
 
-  function sheetAddItem(){
-    const draft = { name:"", cat:"obleceni-detske", cond:"dobre", photoBlob:null, photoDataUrl:null, ai:null, aiBusy:false };
+  // Formulář věci: existing = null → přidat; jinak upravit. opts.fromPile = klíč hromádky, kam se po uložení vrátit.
+  function sheetItemForm(existing, opts = {}){
+    const isEdit = !!existing;
     const aiOn = DB.aiAvailable();
+    const base = existing ? estimateFor(existing) : estimate("obleceni-detske", "dobre");
+    const draft = {
+      name: existing ? existing.name : "", cat: existing ? existing.cat : "obleceni-detske", cond: existing ? existing.cond : "dobre",
+      lo: base.lo, hi: base.hi, advice: base.advice, channel: base.channel,
+      // priceSet = cena pochází z AI nebo od člověka → uloží se; jinak zůstává živá heuristika
+      priceSet: !!(existing && existing.price_lo != null), fromAi: !!(existing && existing.price_lo != null),
+      photoBlob: null, photoDataUrl: null,
+    };
+    const existingUrl = existing ? DB.photoUrl(existing) : null;
     openSheet(`
       <div class="sheet__grip"></div>
-      <h3>Přidat věc</h3>
-      <p class="sub">${aiOn ? "Vyfoť ji — appka sama navrhne název, kategorii, stav i cenu. Všechno můžeš upravit." : "Vyfoť ji nebo jen napiš — odhad ceny se dopočítá."}</p>
+      <h3>${isEdit ? "Upravit věc" : "Přidat věc"}</h3>
+      <p class="sub">${isEdit ? "Cokoli tady změníš, uvidí celá rodina." : aiOn ? "Vyfoť ji — appka sama navrhne název, kategorii, stav i cenu. Všechno můžeš upravit." : "Vyfoť ji nebo jen napiš — odhad ceny se dopočítá."}</p>
       <div class="field">
         <label>Fotka ${aiOn ? "" : "(nepovinné)"}</label>
-        <label class="photopick" id="pp">${ic(aiOn ? "sparkle" : "photo")}<span>${aiOn ? "Vyfotit a rozpoznat" : "Vyfotit / vybrat"}</span>
+        <label class="photopick" id="pp">${existingUrl ? `<img src="${esc(existingUrl)}" alt="">` : `${ic(aiOn ? "sparkle" : "photo")}<span>${aiOn ? "Vyfotit a rozpoznat" : "Vyfotit / vybrat"}</span>`}
           <input type="file" accept="image/*" hidden id="pf"></label>
         <div id="ainote"></div>
       </div>
       <div class="field"><label>Co to je</label>
-        <input class="input" id="pn" placeholder="např. Dětská bunda vel. 104" autocomplete="off"></div>
+        <input class="input" id="pn" placeholder="např. Dětská bunda vel. 104" autocomplete="off" value="${esc(draft.name)}"></div>
       <div class="field"><label>Kategorie</label>
         <div class="chips" id="pc">${CATS.map(c => `<button type="button" class="chip" data-c="${c.id}" aria-pressed="${c.id===draft.cat}">${ic(c.icon)}${esc(c.short)}</button>`).join("")}</div></div>
       <div class="field"><label>Stav</label>
         <div class="segment" id="pcond">${CONDS.map(c => `<button type="button" class="seg" data-k="${c.id}" aria-pressed="${c.id===draft.cond}">${esc(c.label)}</button>`).join("")}</div></div>
-      <div class="field"><label>Odhad</label><div class="advice" id="pest"></div></div>
+      <div class="field"><label>Cena na bazaru</label>
+        <div class="pricerow">
+          <input class="input" id="plo" type="number" inputmode="numeric" min="0" step="10" value="${draft.lo}">
+          <span class="sep">–</span>
+          <input class="input" id="phi" type="number" inputmode="numeric" min="0" step="10" value="${draft.hi}">
+          <span class="unit">Kč</span>
+          <button type="button" class="reset" id="preset" title="Vrátit odhad appky">${ic("refresh")}</button>
+        </div>
+        <div class="advice" id="pest" style="margin-top:8px"></div>
+      </div>
       <div class="sheet__actions">
-        <button class="btn btn--ghost" data-act="close">Zrušit</button>
-        <button class="btn btn--accent press" id="padd">Přidat do stacku</button>
+        ${isEdit ? `<button class="btn btn--danger" id="pdel">Smazat</button>` : `<button class="btn btn--ghost" data-act="close">Zrušit</button>`}
+        <button class="btn btn--accent press" id="padd">${isEdit ? "Uložit" : "Přidat do stacku"}</button>
       </div>
     `);
     const estBox = $("#pest");
     const refreshEst = () => {
-      const e = draft.ai ? { lo: draft.ai.price_lo, hi: draft.ai.price_hi, advice: draft.ai.advice, channel: draft.ai.channel } : estimate(draft.cat, draft.cond);
-      estBox.innerHTML = `<b style="color:var(${DEC[e.channel].cvar})">${kcR(e.lo, e.hi)}</b> · ${esc(e.advice)}${draft.ai ? ` <span class="ai-tag">${ic("sparkle")}z fotky</span>` : ""}`;
+      estBox.innerHTML = `<b style="color:var(${DEC[draft.channel].cvar})">${kcR(draft.lo, draft.hi)}</b> · ${esc(draft.advice)}${draft.fromAi ? ` <span class="ai-tag">${ic("sparkle")}z fotky</span>` : draft.priceSet ? ` <span class="ai-tag">${ic("pencil")}ručně</span>` : ""}`;
     };
+    const setPriceInputs = () => { $("#plo").value = draft.lo; $("#phi").value = draft.hi; };
     const setCat = id => { draft.cat = id; $("#pc").querySelectorAll(".chip").forEach(x => x.setAttribute("aria-pressed", x.dataset.c === id)); };
     const setCond = id => { draft.cond = id; $("#pcond").querySelectorAll(".seg").forEach(x => x.setAttribute("aria-pressed", x.dataset.k === id)); };
+    // heuristika: buď celá (cena i rada), nebo jen rada k ručně zadané ceně
+    const recompute = () => {
+      if (draft.priceSet){ const e = estimate(draft.cat, draft.cond, (draft.lo + draft.hi) / 2); draft.advice = e.advice; draft.channel = e.channel; }
+      else { const e = estimate(draft.cat, draft.cond); Object.assign(draft, { lo: e.lo, hi: e.hi, advice: e.advice, channel: e.channel }); setPriceInputs(); }
+      refreshEst();
+    };
     refreshEst();
     $("#pn").addEventListener("input", e => draft.name = e.target.value);
-    // ruční změna kategorie/stavu zahodí AI cenu (už by neseděla) — název zůstává
-    $("#pc").addEventListener("click", e => { const b = e.target.closest("[data-c]"); if (!b) return; setCat(b.dataset.c); if (draft.ai && draft.ai.cat !== draft.cat){ draft.ai = null; $("#ainote").innerHTML = ""; } refreshEst(); });
-    $("#pcond").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; setCond(b.dataset.k); if (draft.ai && draft.ai.cond !== draft.cond){ draft.ai = null; $("#ainote").innerHTML = ""; } refreshEst(); });
+    // změna kategorie/stavu: AI/ruční cena zůstane, ale rada se přepočítá; heuristická cena se přepočítá celá
+    $("#pc").addEventListener("click", e => { const b = e.target.closest("[data-c]"); if (!b) return; setCat(b.dataset.c); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
+    $("#pcond").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (!b) return; setCond(b.dataset.k); if (draft.fromAi){ draft.fromAi = false; $("#ainote").innerHTML = ""; } recompute(); });
+    const onPrice = () => {
+      const lo = Math.max(0, Math.round(+$("#plo").value || 0)), hi = Math.max(0, Math.round(+$("#phi").value || 0));
+      draft.lo = Math.min(lo, hi); draft.hi = Math.max(lo, hi); draft.priceSet = true; draft.fromAi = false; $("#ainote").innerHTML = "";
+      recompute();
+    };
+    $("#plo").addEventListener("change", onPrice);
+    $("#phi").addEventListener("change", onPrice);
+    $("#preset").addEventListener("click", () => { draft.priceSet = false; draft.fromAi = false; $("#ainote").innerHTML = ""; recompute(); });
     $("#pf").addEventListener("change", async e => {
       const f = e.target.files[0]; if (!f) return;
       let r;
@@ -553,34 +590,43 @@
       const pp = $("#pp");
       pp.innerHTML = `<img src="${r.dataUrl}" alt="">` + (aiOn ? `<div class="ai-veil">${ic("sparkle","spin")}Rozpoznávám…</div>` : "");
       if (!aiOn) return;
-      draft.aiBusy = true; busy($("#padd"), true);
+      busy($("#padd"), true);
       try {
         const ai = await DB.analyzePhoto(r.blob);
         if (!$("#pp")) return;                       // sheet mezitím zavřený
-        draft.ai = ai;
         if (!draft.name.trim()){ draft.name = ai.name; $("#pn").value = ai.name; }
         if (CAT[ai.cat]) setCat(ai.cat);
         if (COND[ai.cond]) setCond(ai.cond);
-        refreshEst();
+        Object.assign(draft, { lo: ai.price_lo, hi: ai.price_hi, advice: ai.advice, channel: ai.channel, priceSet: true, fromAi: true });
+        setPriceInputs(); refreshEst();
         const sure = ai.confidence >= 0.7 ? "" : ai.confidence >= 0.4 ? " · nejsem si úplně jistá" : " · tipuju, radši zkontroluj";
         $("#ainote").innerHTML = `<div class="ai-note">${ic("sparkle")}Rozpoznáno z fotky${sure}</div>`;
       } catch(err){
         toast("AI nepomohla: " + err.message);
       } finally {
-        draft.aiBusy = false; busy($("#padd"), false);
+        busy($("#padd"), false);
         const veil = $("#pp .ai-veil"); if (veil) veil.remove();
       }
     });
+    const afterSave = (msg) => { forceCloseSheet(); render(); toast(msg); if (opts.fromPile) sheetPile(opts.fromPile); };
     $("#padd").addEventListener("click", async () => {
       const name = draft.name.trim();
       if (!name){ $("#pn").focus(); $("#pn").style.borderColor = "var(--trash)"; return; }
       busy($("#padd"), true);
+      const ai = draft.priceSet ? { price_lo: draft.lo, price_hi: draft.hi, advice: draft.advice, channel: draft.channel } : null;
       try {
-        await DB.addItem({ name, cat: draft.cat, cond: draft.cond, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl, createdBy: meId, ai: draft.ai });
-        forceCloseSheet(); render(); toast("Přidáno do stacku");
+        if (isEdit) await DB.updateItem(existing.id, { name, cat: draft.cat, cond: draft.cond, ai, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl });
+        else await DB.addItem({ name, cat: draft.cat, cond: draft.cond, photoBlob: draft.photoBlob, photoDataUrl: draft.photoDataUrl, createdBy: meId, ai });
+        afterSave(isEdit ? "Uloženo" : "Přidáno do stacku");
       } catch(err){ busy($("#padd"), false); toast(err.message === "quota" ? "Došlo místo v prohlížeči — zkus bez fotky." : err.message); }
     });
-    setTimeout(() => (aiOn ? $("#pf") : $("#pn"))?.focus(), 50);
+    $("#pdel")?.addEventListener("click", async () => {
+      if (!confirm(`Smazat „${draft.name || existing.name}“? Tohle nejde vrátit.`)) return;
+      busy($("#pdel"), true);
+      try { await DB.deleteItem(existing.id); afterSave("Smazáno"); }
+      catch(err){ busy($("#pdel"), false); toast(err.message); }
+    });
+    setTimeout(() => (isEdit ? $("#pn") : aiOn ? $("#pf") : $("#pn"))?.focus(), 50);
   }
 
   function sheetPile(key){
@@ -609,7 +655,7 @@
       const url = DB.photoUrl(i);
       return `<div class="li">
         <span class="li__ph">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ic(c.icon)}</span>
-        <div class="li__t"><div class="li__n">${esc(i.name)}</div><div class="li__s">${sub}</div></div>
+        <div class="li__t li__t--edit" data-edit="${i.id}" title="Upravit"><div class="li__n">${esc(i.name)}</div><div class="li__s">${sub}</div></div>
         ${action}</div>`;
     }).join("");
     const copyBtn = (key === "sell" || key === "donate") && list.length ? `<button class="btn btn--ghost" id="copylist">Zkopírovat seznam</button>` : "";
@@ -749,6 +795,8 @@
 
   /* ---------- globální události ---------- */
   document.addEventListener("click", async e => {
+    const ed = e.target.closest("[data-edit]");
+    if (ed){ const it = items().find(x => x.id === ed.dataset.edit); if (it) sheetItemForm(it, { fromPile: curPileKey }); return; }
     const ret = e.target.closest("[data-return]");
     if (ret){ try { await DB.returnItem(ret.dataset.return); render(); if (curPileKey) sheetPile(curPileKey); } catch(err){ toast(err.message); } return; }
     const mv = e.target.closest("[data-move]");
@@ -760,7 +808,8 @@
     const act = e.target.closest("[data-act]");
     if (!act) return;
     const a = act.dataset.act;
-    if (a === "add") sheetAddItem();
+    if (a === "add"){ curPileKey = null; sheetItemForm(null); }
+    else if (a === "edit"){ const it = pending()[0]; if (it){ curPileKey = null; sheetItemForm(it); } }
     else if (a === "sprint") sheetSprint();
     else if (a === "endsprint"){ const sp = mySprint(); if (sp) finishSprint(sp); }
     else if (a === "players") sheetPickPlayer(false);

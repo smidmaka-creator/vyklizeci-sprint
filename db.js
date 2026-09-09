@@ -106,6 +106,13 @@
     }
     async returnItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.decision = null; it.decided_by = null; it.decided_at = null; it.position = Date.now(); this._save(); this._emit(); } }
     async skipItem(id){ const it = this.s.items.find(x => x.id === id); if (it){ it.position = Math.min(...this.s.items.filter(i => !i.decision).map(i => i.position)) - 1; this._save(); this._emit(); } }
+    async updateItem(id, { name, cat, cond, ai, photoDataUrl }){
+      const it = this.s.items.find(x => x.id === id); if (!it) return;
+      Object.assign(it, { name, cat, cond, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null });
+      if (photoDataUrl) it.photo_path = photoDataUrl;
+      this._save(); this._emit();
+    }
+    async deleteItem(id){ this.s.items = this.s.items.filter(x => x.id !== id); this._save(); this._emit(); }
 
     // --- sprinty ---
     async startSprint({ playerId, zone, minutes }){
@@ -280,6 +287,26 @@
       await this._after("items");
     }
     async returnItem(id){ await this.sb.from("items").update({ decision: null, decided_by: null, decided_at: null, position: Date.now() }).eq("id", id); await this._after("items"); }
+    async updateItem(id, { name, cat, cond, ai, photoBlob }){
+      const row = { name, cat, cond, price_lo: ai ? ai.price_lo : null, price_hi: ai ? ai.price_hi : null, advice: ai ? ai.advice : null, channel: ai ? ai.channel : null };
+      const old = this.cache.items.find(x => x.id === id);
+      if (photoBlob){
+        row.photo_path = this.household.id + "/" + uid() + ".jpg";
+        const { error } = await this.sb.storage.from("photos").upload(row.photo_path, photoBlob, { contentType: "image/jpeg", upsert: false });
+        if (error) throw new Error("Fotku se nepodařilo nahrát: " + error.message);
+      }
+      const { error } = await this.sb.from("items").update(row).eq("id", id);
+      if (error) throw new Error(error.message);
+      if (photoBlob && old && old.photo_path) this.sb.storage.from("photos").remove([old.photo_path]).catch(() => {});
+      await this._after("items");
+    }
+    async deleteItem(id){
+      const old = this.cache.items.find(x => x.id === id);
+      const { error } = await this.sb.from("items").delete().eq("id", id);
+      if (error) throw new Error(error.message);
+      if (old && old.photo_path) this.sb.storage.from("photos").remove([old.photo_path]).catch(() => {});
+      await this._after("items");
+    }
     async skipItem(id){
       const pend = this.cache.items.filter(i => !i.decision);
       const min = Math.min(...pend.map(i => Number(i.position)));
