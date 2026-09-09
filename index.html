@@ -154,7 +154,11 @@
   .card--behind{transform:scale(.94) translateY(18px);pointer-events:none;opacity:.85}
   .card__photo{flex:1;position:relative;display:grid;place-items:center;color:var(--green);min-height:120px;
     background:linear-gradient(160deg,var(--green-soft),color-mix(in srgb,var(--green-soft) 50%,var(--surface)))}
-  .card__photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .card__photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:var(--green-soft)}
+  .card__photo .zoomhint{position:absolute;right:12px;top:12px;width:30px;height:30px;border-radius:999px;background:rgba(10,16,13,.45);color:#fff;display:grid;place-items:center;font-size:15px}
+  .viewer{position:fixed;inset:0;z-index:80;background:rgba(10,16,13,.94);display:grid;place-items:center;padding:12px;animation:fade .15s ease}
+  .viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px}
+  .viewer .close{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;width:40px;height:40px;border-radius:999px;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:22px;font-weight:800;cursor:pointer}
   .bigic{font-size:84px;line-height:1;opacity:.5}
   .bigic .ic{stroke-width:1.4}
   .price{position:absolute;left:14px;bottom:12px;padding:6px 12px;border-radius:999px;background:var(--ink);color:var(--ground);
@@ -269,7 +273,8 @@
   .seg[aria-pressed="true"]{background:var(--surface);color:var(--green-ink);box-shadow:var(--shadow-soft)}
   .photopick{height:140px;border:2px dashed color-mix(in srgb,var(--green) 40%,transparent);border-radius:20px;display:grid;place-items:center;
     cursor:pointer;overflow:hidden;position:relative;text-align:center;font-size:13px;font-weight:700;gap:4px;background:var(--green-soft);color:var(--green-ink)}
-  .photopick img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .photopick img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .photopick.has-img{height:auto;aspect-ratio:4/3;max-height:min(360px,48dvh);border-style:solid}
   .photopick .ic{font-size:26px;stroke-width:2}
   .ai-veil{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(10,16,13,.58);color:#fff;font-weight:800;font-size:14px}
   .ai-veil .ic{font-size:20px;stroke-width:2.2;color:#fff}
@@ -293,6 +298,7 @@
     flex:0 0 auto;color:var(--green);font-size:20px;overflow:hidden}
   .li__ph .ic{stroke-width:2}
   .li__ph img{width:100%;height:100%;object-fit:cover}
+  .li__ph[data-view]{cursor:zoom-in}
   .li__t{flex:1;min-width:0}
   .li__t--edit{cursor:pointer;border-radius:10px;margin:-4px;padding:4px}
   .li__t--edit:hover{background:var(--surface-2)}

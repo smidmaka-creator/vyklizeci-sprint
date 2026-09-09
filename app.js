@@ -42,6 +42,7 @@
     wifi:'<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01"/>',
     sparkle:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
     pencil:'<path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17zM13 8l3 3"/>',
+    zoom:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
     refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/>',
   };
   const ic = (n, cls="") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||""}</svg>`;
@@ -174,7 +175,7 @@
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
-    const photo = url ? `<img src="${esc(url)}" alt="" loading="lazy">` : `<span class="bigic">${ic(c.icon)}</span>`;
+    const photo = url ? `<img src="${esc(url)}" alt="" loading="lazy">${top ? `<span class="zoomhint" aria-hidden="true">${ic("zoom")}</span>` : ""}` : `<span class="bigic">${ic(c.icon)}</span>`;
     const stamps = top ? `
       <div class="stamp" data-dir="keep">Nechat</div>
       <div class="stamp" data-dir="sell">Prodat</div>
@@ -293,10 +294,10 @@
     const card = $(".card--top");
     if (!card) return;
     const stamps = card.querySelectorAll(".stamp");
-    let sx=0, sy=0, dx=0, dy=0, dragging=false;
+    let sx=0, sy=0, dx=0, dy=0, dragging=false, t0=0, onPhoto=false;
     const dirOf = () => Math.abs(dx) > Math.abs(dy) ? (dx>0?"sell":"trash") : (dy>0?"donate":"keep");
     const clearStamps = () => stamps.forEach(s => s.style.opacity = 0);
-    card.addEventListener("pointerdown", e => { dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; card.setPointerCapture(e.pointerId); card.style.transition = "none"; });
+    card.addEventListener("pointerdown", e => { dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; t0 = Date.now(); onPhoto = !!e.target.closest(".card__photo img, .zoomhint"); card.setPointerCapture(e.pointerId); card.style.transition = "none"; });
     card.addEventListener("pointermove", e => {
       if (!dragging) return;
       dx = e.clientX - sx; dy = e.clientY - sy;
@@ -309,7 +310,12 @@
       dragging = false;
       const d = dirOf(), dist = Math.hypot(dx, dy);
       if (dist > 92) flyOut(card, d, dx, dy);
-      else { card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearStamps(); }
+      else {
+        card.style.transition = "transform .26s cubic-bezier(.2,.8,.2,1)"; card.style.transform = ""; clearStamps();
+        // krátké ťuknutí na fotku → celá obrazovka
+        const img = card.querySelector(".card__photo img");
+        if (onPhoto && img && dist < 8 && Date.now() - t0 < 400) openViewer(img.src);
+      }
     };
     card.addEventListener("pointerup", end);
     card.addEventListener("pointercancel", () => { dragging = false; card.style.transition = "transform .2s"; card.style.transform = ""; clearStamps(); });
@@ -427,6 +433,16 @@
 
   function busy(btn, on){ if (!btn) return; btn.disabled = on; btn.style.opacity = on ? ".6" : ""; }
 
+  // fotka na celou obrazovku (ťuknutí kamkoli zavře)
+  function openViewer(url){
+    document.querySelector(".viewer")?.remove();
+    const v = document.createElement("div");
+    v.className = "viewer";
+    v.innerHTML = `<img src="${esc(url)}" alt=""><button class="close" aria-label="Zavřít">✕</button>`;
+    v.addEventListener("click", () => v.remove());
+    document.body.appendChild(v);
+  }
+
   // --- onboarding domácnosti (jen remote) ---
   function sheetHouseholdOnboarding(){
     let mode = "create";
@@ -531,7 +547,7 @@
       <p class="sub">${isEdit ? "Cokoli tady změníš, uvidí celá rodina." : aiOn ? "Vyfoť ji — appka sama navrhne název, kategorii, stav i cenu. Všechno můžeš upravit." : "Vyfoť ji nebo jen napiš — odhad ceny se dopočítá."}</p>
       <div class="field">
         <label>Fotka ${aiOn ? "" : "(nepovinné)"}</label>
-        <label class="photopick" id="pp">${existingUrl ? `<img src="${esc(existingUrl)}" alt="">` : `${ic(aiOn ? "sparkle" : "photo")}<span>${aiOn ? "Vyfotit a rozpoznat" : "Vyfotit / vybrat"}</span>`}
+        <label class="photopick ${existingUrl ? "has-img" : ""}" id="pp">${existingUrl ? `<img src="${esc(existingUrl)}" alt="">` : `${ic(aiOn ? "sparkle" : "photo")}<span>${aiOn ? "Vyfotit a rozpoznat" : "Vyfotit / vybrat"}</span>`}
           <input type="file" accept="image/*" hidden id="pf"></label>
         <div id="ainote"></div>
       </div>
@@ -588,6 +604,7 @@
       try { r = await downscale(f); draft.photoBlob = r.blob; draft.photoDataUrl = r.dataUrl; }
       catch(err){ toast("Fotku se nepodařilo zpracovat"); return; }
       const pp = $("#pp");
+      pp.classList.add("has-img");
       pp.innerHTML = `<img src="${r.dataUrl}" alt="">` + (aiOn ? `<div class="ai-veil">${ic("sparkle","spin")}Rozpoznávám…</div>` : "");
       if (!aiOn) return;
       busy($("#padd"), true);
@@ -654,7 +671,7 @@
       }
       const url = DB.photoUrl(i);
       return `<div class="li">
-        <span class="li__ph">${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ic(c.icon)}</span>
+        <span class="li__ph" ${url ? `data-view="${esc(url)}" title="Zobrazit fotku"` : ""}>${url ? `<img src="${esc(url)}" alt="" loading="lazy">` : ic(c.icon)}</span>
         <div class="li__t li__t--edit" data-edit="${i.id}" title="Upravit"><div class="li__n">${esc(i.name)}</div><div class="li__s">${sub}</div></div>
         ${action}</div>`;
     }).join("");
@@ -795,6 +812,8 @@
 
   /* ---------- globální události ---------- */
   document.addEventListener("click", async e => {
+    const vw = e.target.closest("[data-view]");
+    if (vw){ openViewer(vw.dataset.view); return; }
     const ed = e.target.closest("[data-edit]");
     if (ed){ const it = items().find(x => x.id === ed.dataset.edit); if (it) sheetItemForm(it, { fromPile: curPileKey }); return; }
     const ret = e.target.closest("[data-return]");
