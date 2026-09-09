@@ -1,38 +1,47 @@
 # Vyklízecí sprint
 
-Prototyp appky na zábavné protřídění věcí v přeplněném bytě — oblečení, hračky, nádobí, elektro.
+Rodinná appka na zábavné protřídění věcí v přeplněném bytě — oblečení, hračky, nádobí, elektro.
+Vanilla JS bez buildu; data buď jen v prohlížeči (lokální režim), nebo sdílená mezi telefony celé rodiny přes Supabase.
 
 ## Co umí
 
-- **Karty jako Tinder** — u každé věci swipneš (nebo ťukneš) rozhodnutí:
-  - ← Vyhodit · → Prodat · ↑ Nechat · ↓ Darovat
-  - navíc *Krabice na rok* pro věci, u kterých si nejsi jistý
-- **Vyklízecí sprint** — časovka na jednu zónu (10 / 15 / 25 min), počítadlo vyřešených kusů, +5 XP navíc za kus
-- **Gamifikace** — XP, úrovně, série dní v řadě (streak), konfety za level up
-- **Rodinný žebříček** — víc hráčů (děti, rodiče), XP se počítá zvlášť
-- **Chytrý odhad** — z kategorie a stavu věci se dopočítá orientační cena a doporučení, jestli má smysl prodávat (Vinted / Bazoš) nebo rovnou darovat
-- **Seznamy na akci** — hromádka „Prodat" a „Darovat" jde zkopírovat jako text
+- **Karty jako Tinder** — u každé věci swipneš (nebo ťukneš) rozhodnutí: ← Vyhodit · → Prodat · ↑ Nechat · ↓ Darovat, navíc *Krabice na rok*
+- **Vyklízecí sprint** — časovka na jednu zónu (10 / 15 / 25 min), +5 XP za kus, ostatní vidí, že sprintuješ
+- **Gamifikace** — XP, úrovně, série dní v řadě, konfety
+- **Rodina** — jedna domácnost, každý na svém mobilu, společný stack i hromádky, živý žebříček
+- **Chytrý odhad** — z kategorie a stavu se dopočítá orientační cena a doporučení prodat / darovat
+- **Fotky** — vyfotíš věc, zmenší se a uloží do Storage
 
-## Jak to spustit
+## Soubory
 
-Je to jeden soubor `index.html`, bez buildu a bez závislostí. Stačí ho otevřít v prohlížeči:
+| | |
+|---|---|
+| `index.html` | vzhled + kostra stránky |
+| `app.js` | UI a herní logika |
+| `db.js` | datová vrstva — `LocalDB` (localStorage) nebo `RemoteDB` (Supabase), stejné rozhraní |
+| `config.js` | URL + anon klíč Supabase; prázdné = lokální režim |
+| `supabase/schema.sql` | tabulky, RLS, RPC, realtime, Storage bucket |
 
-```bash
-start index.html
-```
+## Lokální režim (bez nastavování)
 
-Nebo přes lokální server (kvůli fotoaparátu na mobilu je lepší https):
+Otevři `index.html` v prohlížeči. Běží na ukázkových datech, nic se nikam neposílá.
 
-```bash
-npx serve .
-```
+## Rodinný režim (Supabase) — nastavení
 
-## Data
+1. **Supabase projekt** — na [supabase.com](https://supabase.com) založ projekt (free tier stačí).
+2. **Anonymní přihlášení** — *Authentication → Providers → Anonymous sign-ins* → zapnout. Každý telefon dostane vlastní identitu bez e-mailu a hesla.
+3. **Schéma** — *SQL Editor → New query*, vlož celý obsah `supabase/schema.sql` a spusť.
+4. **Klíče** — *Project Settings → API* → zkopíruj *Project URL* a *anon public* klíč do `config.js`.
+5. **Hosting** — appka musí běžet přes https (kvůli fotoaparátu a Supabase). Nejjednodušší je GitHub Pages: repo → *Settings → Pages → Deploy from branch → master / root*.
 
-Všechno se ukládá jen do `localStorage` v daném prohlížeči, nikam se nic neodesílá.
-Aplikace startuje na ukázkových datech — smažeš je v ozubeném kolečku vpravo nahoře.
+Pak na prvním telefonu **založ domácnost** (dostaneš 6místný kód), na ostatních **Přidat se kódem**. Kód je kdykoli vidět pod ikonou 👥 nahoře.
 
-## Stav
+### Bezpečnost
 
-Prototyp / proof of concept. Není to hotový produkt — chybí sync mezi zařízeními,
-reálné napojení na bazary, kvalitní rozpoznávání věcí z fotky atd.
+Anon klíč je určený pro klienty a smí být v kódu. Data chrání Row Level Security: každý řádek patří domácnosti a vidí ho jen zařízení, která jsou jejími členy (tabulka `household_members`, funkce `is_member`). Připojit se jde jen přes RPC `join_household(kód)`.
+
+## Co (zatím) není
+
+- rozpoznání věci z fotky (AI) a automatický odhad ceny podle reálných inzerátů
+- instalace jako PWA (ikona na ploše, offline)
+- napojení na Vinted / Bazoš
