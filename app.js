@@ -69,11 +69,11 @@
   ];
   const COND = Object.fromEntries(CONDS.map(c => [c.id, c]));
   const DEC = {
-    keep:   {label:"Nechat",  verb:"Zůstává doma",              icon:"home",  cvar:"--keep"},
-    sell:   {label:"Prodat",  verb:"Putuje na prodej",           icon:"tag",   cvar:"--sell"},
-    donate: {label:"Darovat", verb:"Jde darovat",                icon:"gift",  cvar:"--donate"},
-    trash:  {label:"Vyhodit", verb:"Míří do tříděného odpadu",    icon:"bin",   cvar:"--trash"},
-    maybe:  {label:"Krabice na rok", verb:"Uloženo do krabice na rok", icon:"clock", cvar:"--maybe"},
+    keep:   {label:"Nechat",  verb:"Zůstává doma",       icon:"home",  cvar:"--keep"},
+    sell:   {label:"Prodat",  verb:"Jde na prodej",       icon:"tag",   cvar:"--sell"},
+    donate: {label:"Darovat", verb:"Jde darovat",         icon:"gift",  cvar:"--donate"},
+    trash:  {label:"Vyhodit", verb:"Jde vyhodit",         icon:"bin",   cvar:"--trash"},
+    maybe:  {label:"Krabice na rok", verb:"V krabici na rok", icon:"clock", cvar:"--maybe"},
   };
   const LEVELS = [
     {min:0,name:"Nováček"},{min:150,name:"Vyklízeč"},{min:400,name:"Uklizeno"},
