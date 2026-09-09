@@ -174,20 +174,22 @@
     border-radius:44% 56% 62% 38% / 52% 41% 59% 48%;transform:rotate(18deg)}
   .cardstack{position:relative;width:min(360px,88vw);height:420px}
   .card{position:absolute;inset:0;background:var(--surface);border-radius:28px;
-    box-shadow:var(--shadow-card);overflow:hidden}
+    box-shadow:var(--shadow-card);overflow:hidden;contain:paint;transform:translateZ(0)}
   .card--top{cursor:grab;touch-action:pan-y;-webkit-user-select:none;user-select:none;will-change:transform}
+  @keyframes cardIn{from{transform:scale(.94) translateY(18px);opacity:.85}to{transform:none;opacity:1}}
+  .card--enter{animation:cardIn .22s cubic-bezier(.2,.8,.2,1)}
   .card--top:active{cursor:grabbing}
   .card--behind{transform:scale(.94) translateY(18px);pointer-events:none;opacity:.85}
   /* fotka přes celou kartu: rozmazané pozadí + celá fotka (contain) přes něj */
-  .card__photo{position:absolute;inset:0;display:grid;place-items:center;color:var(--green);overflow:hidden;
+  .card__photo{position:absolute;inset:0;display:grid;place-items:center;color:var(--green);overflow:hidden;transform:translateZ(0);
     background:linear-gradient(160deg,var(--green-soft),color-mix(in srgb,var(--green-soft) 50%,var(--surface)))}
-  .card__photo img.bg{position:absolute;inset:-8%;width:116%;height:116%;object-fit:cover;filter:blur(22px) saturate(1.1);opacity:.75}
+  .card__photo img.bg{position:absolute;inset:-8%;width:116%;height:116%;object-fit:cover;filter:blur(14px);opacity:.7;transform:translateZ(0)}
   .card__photo img.fg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
   .card__veil{position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(to bottom,rgba(10,16,13,.28) 0,transparent 26%,transparent 44%,rgba(10,16,13,.86) 100%)}
   .card__cap{position:absolute;left:14px;right:14px;bottom:62px;color:#fff;display:flex;flex-direction:column;gap:6px;pointer-events:none}
   .card__cap .card__name{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
-  .card__cap .tag{background:rgba(255,255,255,.18);color:#fff;backdrop-filter:blur(6px)}
+  .card__cap .tag{background:rgba(0,0,0,.38);color:#fff}
   .card__cap .tag--owner i{background:var(--oc)}
   .card__cap .advice{color:rgba(255,255,255,.85)}
   .card__caprow{display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none}
@@ -199,7 +201,7 @@
   /* rohová tlačítka = rozhodnutí; při tahu se rozsvítí ten, ke kterému táhneš */
   .corner{--h:var(--keep);--edge:var(--keep-dark);position:absolute;display:inline-flex;align-items:center;gap:6px;
     padding:9px 13px;border:0;border-radius:999px;background:var(--h);color:var(--on-h);font-weight:800;font-size:13.5px;cursor:pointer;
-    box-shadow:0 4px 0 var(--edge),0 6px 16px rgba(0,0,0,.25);transition:transform .12s,opacity .12s,box-shadow .06s}
+    box-shadow:0 4px 0 var(--edge),0 6px 16px rgba(0,0,0,.25);transition:transform .12s,opacity .12s;will-change:transform}
   .corner .ic{font-size:17px;stroke-width:2.4}
   .corner:active{transform:translateY(4px);box-shadow:0 0 0 var(--edge),0 2px 8px rgba(0,0,0,.2)}
   .corner--tl{top:12px;left:12px}
@@ -207,7 +209,7 @@
   .corner--bl{bottom:12px;left:12px}
   .corner--br{bottom:12px;right:12px}
   .card.dragging .corner{opacity:.45}
-  .card.dragging .corner.hot{opacity:1;transform:scale(1.18);box-shadow:0 4px 0 var(--edge),0 0 0 6px color-mix(in srgb,var(--h) 35%,transparent),0 8px 22px rgba(0,0,0,.3)}
+  .card.dragging .corner.hot{opacity:1;transform:scale(1.18);outline:5px solid color-mix(in srgb,var(--h) 45%,transparent);outline-offset:2px}
   .corner--tl.hot{transform-origin:top left}.corner--tr.hot{transform-origin:top right}.corner--bl.hot{transform-origin:bottom left}.corner--br.hot{transform-origin:bottom right}
   .viewer{position:fixed;inset:0;z-index:80;background:rgba(10,16,13,.94);display:grid;place-items:center;padding:12px;animation:fade .15s ease}
   .viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px}

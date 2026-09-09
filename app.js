@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.4 · 9. 9. 2026";
+  const APP_VERSION = "0.8.5 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -135,12 +135,14 @@
   // při startu vždy Moje, pokud tam něco je; přepnutí platí do dalšího spuštění
   let queueMode = "mine";
   let pinId = null;                                    // věc vrácená z krabice na rok → dočasně nahoře
+  const optimistic = new Set();                        // právě rozhodnuté věci, které ještě neuložila DB (skryté hned)
+  let lastTopId = null, lastTopAt = 0;                 // pro animaci nástupu nové karty
   let skipped = [];                                    // přeskočené věci jdou na úplný konec fronty (v pořadí přeskočení)
   const rank = i => i.id === pinId ? -1
     : skipped.includes(i.id) ? 10 + skipped.indexOf(i.id)
     : (i.owner_id === meId ? 0 : (i.owner_id ? 2 : 1));
-  const pendingAll = () => items().filter(i => !i.decision).sort((a, b) => rank(a) - rank(b));
-  const myPending = () => items().filter(i => !i.decision && i.owner_id === meId);
+  const pendingAll = () => items().filter(i => !i.decision && !optimistic.has(i.id)).sort((a, b) => rank(a) - rank(b));
+  const myPending = () => items().filter(i => !i.decision && !optimistic.has(i.id) && i.owner_id === meId);
   const pending = () => queueMode === "mine" ? myPending().sort((a, b) => rank(a) - rank(b)) : pendingAll();
   const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
   const decidedTodayByMe = () => items().filter(i => i.decided_by === meId && i.decided_at && new Date(i.decided_at).getTime() >= startOfToday()).length;
@@ -217,7 +219,7 @@
 
   /* ---------- Stack ---------- */
   // Karta = celá fotka; čtyři rohy = čtyři rozhodnutí (↖ nechat, ↗ prodat, ↙ vyhodit, ↘ darovat)
-  function cardMarkup(it, top){
+  function cardMarkup(it, top, enter){
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
@@ -233,7 +235,7 @@
       <button class="corner corner--tr" data-decide="sell"   style="--h:var(--sell);--edge:var(--sell-dark)">${ic("tag")}Prodat</button>
       <button class="corner corner--bl" data-decide="trash"  style="--h:var(--trash);--edge:var(--trash-dark)">${ic("bin")}Vyhodit</button>
       <button class="corner corner--br" data-decide="donate" style="--h:var(--donate);--edge:var(--donate-dark)">${ic("gift")}Darovat</button>` : "";
-    return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
+    return `<article class="card ${top?"card--top":"card--behind"}${enter?" card--enter":""}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
       <div class="card__photo">${photo}</div>
       <div class="card__veil"></div>
       ${corners}
@@ -274,7 +276,10 @@
     }
     const cards = [];
     if (pend[1]) cards.push(cardMarkup(pend[1], false));
-    cards.push(cardMarkup(pend[0], true));
+    // nová karta nahoře → krátký nástup; třída zůstává i při dalších překreslení během ~300 ms, aby animaci nepřerušila
+    if (pend[0].id !== lastTopId){ lastTopId = pend[0].id; lastTopAt = Date.now(); }
+    const enter = Date.now() - lastTopAt < 300;
+    cards.push(cardMarkup(pend[0], true, enter));
     const hint = !seenHint() ? `<div class="hint">${ic("arrows")} Táhni kartu k rohu, nebo ťukni na tlačítko v rohu</div>` : "";
     return filter + banner + `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
       <div class="subrow">
@@ -354,14 +359,21 @@
       onPhoto = !!e.target.closest(".card__photo");
       card.setPointerCapture(e.pointerId); card.style.transition = "none";
     });
+    let raf = 0, hotKey = null, wasDragging = false;
+    const apply = () => {
+      raf = 0;
+      if (!dragging) return;
+      const ty = vertOk() ? dy : 0;
+      card.style.transform = `translate3d(${dx}px,${ty}px,0) rotate(${dx*0.05}deg)`;
+      const d = dirOf(), dist = distOf();
+      const isDrag = dist > 24, hk = isDrag ? d : null;
+      if (isDrag !== wasDragging){ card.classList.toggle("dragging", isDrag); wasDragging = isDrag; }
+      if (hk !== hotKey){ Object.entries(corners).forEach(([k, c]) => c && c.classList.toggle("hot", k === hk)); hotKey = hk; }
+    };
     card.addEventListener("pointermove", e => {
       if (!dragging) return;
       dx = e.clientX - sx; dy = e.clientY - sy;
-      const ty = vertOk() ? dy : 0;
-      card.style.transform = `translate(${dx}px,${ty}px) rotate(${dx*0.05}deg)`;
-      const d = dirOf(), dist = distOf();
-      card.classList.toggle("dragging", dist > 24);
-      Object.entries(corners).forEach(([k, c]) => c && c.classList.toggle("hot", k === d && dist > 24));
+      if (!raf) raf = requestAnimationFrame(apply);
     });
     const end = () => {
       if (!dragging) return;
@@ -411,15 +423,15 @@
     const beforeLv = levelOf(p.xp).idx;
     localStorage.setItem("vs.seenHint", "1");
     if (pinId === it.id) pinId = null;
+    optimistic.add(it.id); animating = false; render();             // další karta hned, DB dobíhá na pozadí
+    toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", () => undo(it.id, p.id, gain));
     try {
       await DB.decideItem(it.id, decision, p.id);
       const after = await DB.awardXp(p.id, gain);
       await DB.touchStreak(p.id);
-      animating = false;
-      render();
+      optimistic.delete(it.id); render();
       if (after && levelOf(after.xp).idx > beforeLv){ confetti(); toast(`Level up · ${levelOf(after.xp).name}!`); }
-      else toast(`${DEC[decision].verb} · +${gain} XP`, "Zpět", () => undo(it.id, p.id, gain));
-    } catch(e){ animating = false; render(); toast("Nepovedlo se uložit: " + e.message); }
+    } catch(e){ optimistic.delete(it.id); render(); toast("Nepovedlo se uložit: " + e.message); }
   }
   async function undo(itemId, playerId, gain){
     try { await DB.returnItem(itemId); await DB.awardXp(playerId, -gain); render(); }
@@ -849,7 +861,8 @@
     $("#scroll").innerHTML = `<div class="loading">${ic("leaf")}<span>Načítám…</span></div>`;
     try {
       const r = await DB.init();
-      DB.onChange(() => { if (ready) render(); });
+      let rafR = 0;
+      DB.onChange(() => { if (ready && !rafR) rafR = requestAnimationFrame(() => { rafR = 0; render(); }); });
       if (r.needsHousehold){ sheetHouseholdOnboarding(); return; }
       if (DB.mode === "local" && players().length === 0 && !localStorage.getItem("vs.local.touched")){
         const first = await DB.seedExample(); localStorage.setItem("vs.local.touched", "1"); if (first) setMe(first);
