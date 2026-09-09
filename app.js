@@ -4,6 +4,7 @@
    ============================================================ */
 (() => {
   "use strict";
+  const APP_VERSION = "0.5.0 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -743,6 +744,7 @@
       <div class="sheet__grip"></div>
       <h3>Nastavení</h3>
       <div class="settings-row"><span>Režim</span><span class="mode ${remote?"on":""}">${ic("wifi")}${remote ? "Rodinný · sync" : "Lokální"}</span></div>
+      <div class="settings-row"><span>Verze appky</span><span class="num" style="font-size:12px;font-weight:700">${APP_VERSION}</span></div>
       <div class="settings-row"><span>Věcí v aplikaci</span><span class="num">${items().length}</span></div>
       <div class="settings-row"><span>Dokončených sprintů</span><span class="num">${DB.sprintsDone()}</span></div>
       ${remote ? "" : `<div class="settings-row"><span>Ukázková data</span><button ${DB.isExample()?"":"disabled"} id="wipedemo">Vymazat ukázky</button></div>`}
@@ -864,7 +866,19 @@
   const origWipe = DB.wipeAll.bind(DB); DB.wipeAll = async () => { localStorage.setItem("vs.local.touched", "1"); return origWipe(); };
 
   // PWA: service worker jen na https (ne při lokálním vývoji), zákaz pinch-zoomu na iOS
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol === "https:"){
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("./sw.js").then(reg => {
+      // při každém návratu do appky (iOS ji jen probudí, nenačte znovu) zkontrolovat novou verzi
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController){ hadController = true; return; }      // první instalace, nic nepřenačítat
+      if (modalRoot.innerHTML) toast("Je tu nová verze appky", "Obnovit", () => location.reload());
+      else location.reload();
+    });
+  }
   document.addEventListener("gesturestart", e => e.preventDefault());
   document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
