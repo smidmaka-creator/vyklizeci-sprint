@@ -5,7 +5,7 @@
    ============================================================ */
 (() => {
   "use strict";
-  const APP_VERSION = "0.8.5 · 9. 9. 2026";
+  const APP_VERSION = "0.8.6 · 9. 9. 2026";
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const DAY = 86400000;
   const $ = (s, r=document) => r.querySelector(s);
@@ -136,7 +136,7 @@
   let queueMode = "mine";
   let pinId = null;                                    // věc vrácená z krabice na rok → dočasně nahoře
   const optimistic = new Set();                        // právě rozhodnuté věci, které ještě neuložila DB (skryté hned)
-  let lastTopId = null, lastTopAt = 0;                 // pro animaci nástupu nové karty
+  let lastTopId = null;                                // pro animaci nástupu nové karty
   let skipped = [];                                    // přeskočené věci jdou na úplný konec fronty (v pořadí přeskočení)
   const rank = i => i.id === pinId ? -1
     : skipped.includes(i.id) ? 10 + skipped.indexOf(i.id)
@@ -197,7 +197,19 @@
     const banner = DB.isExample()
       ? `<div class="demobanner"><span>Hraješ na ukázkových datech.</span><button data-act="settings">Vymazat</button></div>` : "";
     el.className = "scroll" + (tab === "stack" ? " scroll--stack" : "");
-    if (tab === "stack"){ el.innerHTML = banner + stackScreen(); wireCard(); fitStack(); }
+    if (tab === "stack"){
+      const parts = stackParts();
+      const cur = el.querySelector(".cardstack");
+      // stejné karty nahoře → nechat DOM karty být (žádné problikávání fotky), překreslit jen okolí
+      if (parts.ids && cur && cur.dataset.ids === parts.ids){
+        el.querySelector("#qf").innerHTML = parts.filter;
+        el.querySelector("#sub").innerHTML = parts.subrow;
+        return;
+      }
+      el.innerHTML = banner + `<div id="qf">${parts.filter}</div>` + parts.stage + `<div id="sub">${parts.subrow}</div>`;
+      if (parts.enter){ const top = el.querySelector(".card--top"); if (top) top.classList.add("card--enter"); }
+      wireCard(); fitStack();
+    }
     else if (tab === "piles") el.innerHTML = banner + pilesScreen();
     else el.innerHTML = banner + familyScreen();
   }
@@ -219,7 +231,7 @@
 
   /* ---------- Stack ---------- */
   // Karta = celá fotka; čtyři rohy = čtyři rozhodnutí (↖ nechat, ↗ prodat, ↙ vyhodit, ↘ darovat)
-  function cardMarkup(it, top, enter){
+  function cardMarkup(it, top){
     const c = CAT[it.cat] || CAT.jine;
     const e = estimateFor(it);
     const url = DB.photoUrl(it);
@@ -235,7 +247,7 @@
       <button class="corner corner--tr" data-decide="sell"   style="--h:var(--sell);--edge:var(--sell-dark)">${ic("tag")}Prodat</button>
       <button class="corner corner--bl" data-decide="trash"  style="--h:var(--trash);--edge:var(--trash-dark)">${ic("bin")}Vyhodit</button>
       <button class="corner corner--br" data-decide="donate" style="--h:var(--donate);--edge:var(--donate-dark)">${ic("gift")}Darovat</button>` : "";
-    return `<article class="card ${top?"card--top":"card--behind"}${enter?" card--enter":""}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
+    return `<article class="card ${top?"card--top":"card--behind"}" ${top?'tabindex="0" aria-label="Karta věci: '+esc(it.name)+'"':""}>
       <div class="card__photo">${photo}</div>
       <div class="card__veil"></div>
       ${corners}
@@ -251,41 +263,42 @@
     </article>`;
   }
 
-  function stackScreen(){
+  function stackParts(){
     const all = pendingAll(), mine = myPending(), pend = pending();
     const filter = all.length ? `<div class="qfilter"><div class="segment">
         <button type="button" class="seg" data-queue="mine" aria-pressed="${queueMode==="mine"}">Moje · ${mine.length}</button>
         <button type="button" class="seg" data-queue="all" aria-pressed="${queueMode==="all"}">Všechny · ${all.length}</button>
       </div></div>` : "";
     const done = decidedTodayByMe();
-    const banner = "";
     if (!pend.length){
-      if (queueMode === "mine" && all.length){
-        return filter + `<div class="emptystate">
+      lastTopId = null;
+      const stage = (queueMode === "mine" && all.length)
+        ? `<div class="emptystate">
           <div class="big">${ic("check")}</div>
           <h3>Čistý stůl!</h3>
           <p>${done ? `Dnes vyřízeno ${done}. ` : ""}Tvoje věci mají jasno. Ostatním ještě zbývá ${nVeci(all.length)}.</p>
           <button class="btn btn--ghost" data-queue="all" style="margin-top:14px">Pomoct ostatním</button>
+        </div>`
+        : `<div class="emptystate">
+          <div class="big">${ic("check")}</div>
+          <h3>Stack je prázdný!</h3>
+          <p>Každá věc má jasno. Vyfoť další tlačítkem <b>+</b> nahoře.</p>
         </div>`;
-      }
-      return filter + `<div class="emptystate">
-        <div class="big">${ic("check")}</div>
-        <h3>Stack je prázdný!</h3>
-        <p>Každá věc má jasno. Vyfoť další tlačítkem <b>+</b> nahoře.</p>
-      </div>`;
+      return { filter, stage, subrow: "", ids: null, enter: false };
     }
+    const ids = pend.slice(0, 2).map(i => i.id).join(",");
+    const enter = lastTopId !== null && pend[0].id !== lastTopId;   // nová karta nahoře → krátký nástup
+    lastTopId = pend[0].id;
     const cards = [];
     if (pend[1]) cards.push(cardMarkup(pend[1], false));
-    // nová karta nahoře → krátký nástup; třída zůstává i při dalších překreslení během ~300 ms, aby animaci nepřerušila
-    if (pend[0].id !== lastTopId){ lastTopId = pend[0].id; lastTopAt = Date.now(); }
-    const enter = Date.now() - lastTopAt < 300;
-    cards.push(cardMarkup(pend[0], true, enter));
+    cards.push(cardMarkup(pend[0], true));
     const hint = !seenHint() ? `<div class="hint">${ic("arrows")} Táhni kartu k rohu, nebo ťukni na tlačítko v rohu</div>` : "";
-    return filter + banner + `<div class="stage"><div class="blob"></div><div class="cardstack">${cards.join("")}${hint}</div></div>
-      <div class="subrow">
+    const stage = `<div class="stage"><div class="blob"></div><div class="cardstack" data-ids="${ids}">${cards.join("")}${hint}</div></div>`;
+    const subrow = `<div class="subrow">
         <button class="linkbtn" data-decide="maybe">${ic("clock")}Do krabice na rok</button>
         <button class="linkbtn" data-act="skip">${ic("skip")}Přeskočit</button>
       </div>`;
+    return { filter, stage, subrow, ids, enter };
   }
 
   /* ---------- Hromádky ---------- */
